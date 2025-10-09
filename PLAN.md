@@ -157,6 +157,8 @@ Definition of Done
 ---
 
 ## Phase 10: Reliability & UX polish
+Status: Done (2025-10-09)
+
 Objective
 - Make it robust and pleasant to use.
 
