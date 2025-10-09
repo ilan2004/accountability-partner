@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["@accountability/shared", "@accountability/db"],
-};
+  env: {
+    DATABASE_URL: process.env.DATABASE_URL || 'file:../../packages/db/dev.db',
+  },
+}
 
-export default nextConfig;
+export default nextConfig
