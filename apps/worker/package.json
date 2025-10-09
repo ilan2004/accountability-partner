@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
-    "clean": "rimraf dist node_modules"
+    "clean": "rimraf dist node_modules",
+    "notion:test": "tsx src/scripts/test-notion.ts"
   },
   "dependencies": {
     "@accountability/db": "workspace:*",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/node-cron": "^3.0.11",
+    "pino-pretty": "^13.1.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
