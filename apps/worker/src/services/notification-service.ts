@@ -22,6 +22,7 @@ export class NotificationService {
   private processInterval: number;
   private maxRetries: number;
   private retryDelay: number;
+  private maxRetryDelay: number;
 
   constructor(config: NotificationServiceConfig) {
     this.whatsappClient = config.whatsappClient;
@@ -29,7 +30,8 @@ export class NotificationService {
     this.formatter = new MessageFormatter();
     this.processInterval = config.processInterval || 5000; // Default 5 seconds
     this.maxRetries = config.maxRetries || 3;
-    this.retryDelay = config.retryDelay || 1000; // Start with 1 second
+    this.retryDelay = config.retryDelay || 1000; // base delay 1s
+    this.maxRetryDelay = 30000; // cap at 30s
   }
 
   /**
@@ -289,12 +291,15 @@ export class NotificationService {
         return;
       } catch (error) {
         lastError = error as Error;
-        const delay = this.retryDelay * Math.pow(2, attempt);
+        // exponential backoff with jitter, capped
+        const base = this.retryDelay * Math.pow(2, attempt);
+        const capped = Math.min(base, this.maxRetryDelay);
+        const jitter = Math.floor(capped * (0.8 + Math.random() * 0.4));
         logger.warn(
-          { error, attempt, delay },
-          `Failed to send notification, retrying in ${delay}ms`
+          { error, attempt, delay: jitter },
+          `Failed to send notification, retrying in ${jitter}ms`
         );
-        await sleep(delay);
+        await sleep(jitter);
       }
     }
 

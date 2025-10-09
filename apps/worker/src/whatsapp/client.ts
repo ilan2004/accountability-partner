@@ -19,7 +19,8 @@ export class WhatsAppClient {
   private connectionState: ConnectionState = { isConnected: false };
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private reconnectDelay = 5000; // Start with 5 seconds
+  private reconnectBaseDelayMs = 5000; // Start with 5 seconds
+  private reconnectMaxDelayMs = 60000; // Cap at 60 seconds
 
   constructor(config: WhatsAppConfig = {}) {
     this.config = {
@@ -28,6 +29,17 @@ export class WhatsAppClient {
       printQR: true,
       ...config,
     };
+
+    // Optional overrides via env
+    if (process.env.WA_MAX_RECONNECT_ATTEMPTS) {
+      this.maxReconnectAttempts = Number(process.env.WA_MAX_RECONNECT_ATTEMPTS);
+    }
+    if (process.env.WA_RECONNECT_BASE_DELAY_MS) {
+      this.reconnectBaseDelayMs = Number(process.env.WA_RECONNECT_BASE_DELAY_MS);
+    }
+    if (process.env.WA_RECONNECT_MAX_DELAY_MS) {
+      this.reconnectMaxDelayMs = Number(process.env.WA_RECONNECT_MAX_DELAY_MS);
+    }
   }
 
   /**
@@ -108,11 +120,14 @@ export class WhatsAppClient {
 
       if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
-        const delay = this.reconnectDelay * this.reconnectAttempts;
+        // exponential backoff with jitter and cap
+        const base = this.reconnectBaseDelayMs * Math.pow(2, this.reconnectAttempts - 1);
+        const capped = Math.min(base, this.reconnectMaxDelayMs);
+        const jitter = Math.floor(capped * (0.8 + Math.random() * 0.4));
         logger.info(
-          `Reconnecting in ${delay / 1000}s... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+          `Reconnecting in ${Math.round(jitter / 1000)}s... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
         );
-        setTimeout(() => this.connect(), delay);
+        setTimeout(() => this.connect(), jitter);
       } else if (reason === DisconnectReason.loggedOut) {
         logger.error('Logged out from WhatsApp. Please re-authenticate.');
       } else {

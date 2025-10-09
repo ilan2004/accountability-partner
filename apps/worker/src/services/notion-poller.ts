@@ -10,6 +10,7 @@ export interface NotionPollerConfig {
   notionClient: NotionClient;
   pairId: string;
   pollInterval?: number; // milliseconds
+  debounceWindowMs?: number; // suppress duplicate/rapid events within this window
 }
 
 export class NotionPollerService {
@@ -18,11 +19,13 @@ export class NotionPollerService {
   private pollInterval: number;
   private isRunning = false;
   private lastSyncAt: Date | null = null;
+  private debounceWindowMs: number;
 
   constructor(config: NotionPollerConfig) {
     this.notionClient = config.notionClient;
     this.pairId = config.pairId;
     this.pollInterval = config.pollInterval || 60000; // Default 1 minute
+    this.debounceWindowMs = config.debounceWindowMs ?? 30000; // Default 30s
   }
 
   /**
@@ -227,6 +230,27 @@ export class NotionPollerService {
     // Determine event type based on status change
     if (eventType === 'status_changed' && newStatus === 'Done') {
       eventType = 'completed';
+    }
+
+    // Debounce window: suppress noisy edits within window
+    const windowStart = new Date(timestamp.getTime() - this.debounceWindowMs);
+    const recentSimilar = await prisma.taskEvent.findFirst({
+      where: {
+        taskMirrorId,
+        createdAt: { gte: windowStart },
+        OR: [
+          { eventType },
+          // Also suppress if last newStatus is the same within window
+          { AND: [{ eventType: 'status_changed' }, { newStatus }] },
+          { AND: [{ eventType: 'completed' }, { newStatus: 'Done' }] },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (recentSimilar) {
+      logger.debug({ taskMirrorId, eventType, newStatus }, 'Debounced duplicate/rapid event');
+      return;
     }
 
     // Generate idempotency key
