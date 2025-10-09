@@ -10,11 +10,13 @@
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist node_modules",
-    "notion:test": "tsx src/scripts/test-notion.ts"
+    "notion:test": "tsx src/scripts/test-notion.ts",
+    "wa:test": "tsx src/scripts/test-wa.ts"
   },
   "dependencies": {
     "@accountability/db": "workspace:*",
     "@accountability/shared": "workspace:*",
+    "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.10",
     "@notionhq/client": "^2.2.15",
     "dotenv": "^16.4.7",
