@@ -142,6 +142,8 @@ Definition of Done
 ---
 
 ## Phase 9: Admin utilities & health
+Status: Done (2025-10-09)
+
 Objective
 - Operability and safe admin controls.
 
