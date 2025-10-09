@@ -13,7 +13,9 @@
     "notion:test": "tsx src/scripts/test-notion.ts",
     "wa:test": "tsx src/scripts/test-wa.ts",
     "poller:test": "tsx src/scripts/test-poller.ts",
-    "poll:once": "tsx src/scripts/poll-once.ts"
+    "poll:once": "tsx src/scripts/poll-once.ts",
+    "notify:test": "tsx src/scripts/test-notifications.ts",
+    "notify:once": "tsx src/scripts/notify-once.ts"
   },
   "dependencies": {
     "@accountability/db": "workspace:*",
