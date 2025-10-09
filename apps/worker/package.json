@@ -15,7 +15,10 @@
     "poller:test": "tsx src/scripts/test-poller.ts",
     "poll:once": "tsx src/scripts/poll-once.ts",
     "notify:test": "tsx src/scripts/test-notifications.ts",
-    "notify:once": "tsx src/scripts/notify-once.ts"
+    "notify:once": "tsx src/scripts/notify-once.ts",
+    "schedule:test": "tsx src/scripts/test-schedulers.ts",
+    "send:warning": "tsx src/scripts/send-warning.ts",
+    "send:summary": "tsx src/scripts/send-summary.ts"
   },
   "dependencies": {
     "@accountability/db": "workspace:*",
