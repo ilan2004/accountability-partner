@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+
+ignoredBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - '@whiskeysockets/baileys'
+  - esbuild
+  - prisma
+  - protobufjs
+  - sharp
+  - unrs-resolver
