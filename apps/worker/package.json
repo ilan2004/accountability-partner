@@ -11,6 +11,7 @@
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist node_modules",
     "notion:test": "tsx src/scripts/test-notion.ts",
+    "whatsapp:setup": "tsx src/scripts/whatsapp-setup.ts",
     "wa:test": "tsx src/scripts/test-wa.ts",
     "poller:test": "tsx src/scripts/test-poller.ts",
     "poll:once": "tsx src/scripts/poll-once.ts",
