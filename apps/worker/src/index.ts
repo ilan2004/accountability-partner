@@ -1,5 +1,7 @@
 import { config } from 'dotenv'
 import pino from 'pino'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { prisma } from './lib/db'
 import { NotionClient } from './notion/client'
 import { WhatsAppClient } from './whatsapp/client'
@@ -11,6 +13,22 @@ import { SchedulerService } from './services/scheduler-service'
 config()
 
 const logger = pino({ level: 'info', name: 'worker-main' })
+const execFileAsync = promisify(execFile)
+
+async function ensurePrismaSchema() {
+  try {
+    logger.info('Ensuring database schema with Prisma (db push)...')
+    // Run Prisma db push to create tables if they do not exist
+    const { stdout, stderr } = await execFileAsync('npx', ['prisma', 'db', 'push'], {
+      env: process.env,
+    })
+    if (stdout) logger.info(stdout.trim())
+    if (stderr) logger.warn(stderr.trim())
+    logger.info('Prisma schema ensured')
+  } catch (e) {
+    logger.error({ e }, 'Prisma db push failed - continuing, app may error if schema is missing')
+  }
+}
 
 async function main() {
   logger.info('🚀 Worker starting up...')
@@ -20,6 +38,9 @@ async function main() {
     logger.error('PAIR_ID is required in environment to start worker')
     process.exit(1)
   }
+
+  // Ensure database schema exists before any queries
+  await ensurePrismaSchema()
 
   // Fetch Notion configuration for the pair
   const notionConfig = await prisma.notionConfig.findUnique({ where: { pairId } })
