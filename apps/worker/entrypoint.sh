@@ -1,5 +1,4 @@
 #!/bin/sh
-set -e
 
 echo "[entrypoint] Current working directory: $(pwd)"
 echo "[entrypoint] DATABASE_URL is set: ${DATABASE_URL:+Yes}"
