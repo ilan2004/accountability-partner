@@ -22,7 +22,9 @@
     "send:warning": "tsx src/scripts/send-warning.ts",
     "send:summary": "tsx src/scripts/send-summary.ts",
     "inspect:notion": "tsx src/scripts/inspect-notion.ts",
-    "setup:notion-config": "tsx scripts/create-notion-config.ts"
+    "setup:notion-config": "tsx scripts/create-notion-config.ts",
+    "setup:whatsapp-local": "tsx scripts/local-whatsapp-auth.ts",
+    "upload:auth-to-railway": "tsx scripts/upload-auth-to-railway.ts"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
