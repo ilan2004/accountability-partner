@@ -5,8 +5,9 @@ import { NotionClient } from './notion/client'
 import { WhatsAppClient } from './whatsapp/client'
 import { NotionPollerService } from './services/notion-poller-supabase'
 import { NotificationService } from './services/notification-service-supabase'
-import { SchedulerService } from './services/scheduler-service'
-
+// Temporarily disabled for Supabase migration
+// import { SchedulerService } from './services/scheduler-service'
+// import { WarnScheduler } from './services/warning-scheduler'
 // Load environment variables
 config()
 
