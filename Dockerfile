@@ -14,6 +14,9 @@ RUN npm ci --include=dev
 # Copy the rest of the worker source code
 COPY apps/worker ./
 
+# Copy WhatsApp auth files to persistent volume location
+COPY apps/worker/local-auth/ /data/auth/
+
 # Generate Prisma client (no DB connection required)
 RUN npx prisma generate
 
