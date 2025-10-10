@@ -51,35 +51,67 @@ async function main() {
       if (!pair) {
         logger.info({ pairId }, 'Creating dummy users and pair for worker setup...')
         
-        // Create two dummy users for the pair using manual UUID generation
-        const now = new Date().toISOString()
-        const { data: user1, error: user1Error } = await supabase
+        // Check if dummy users already exist
+        const user1Email = `worker-user1-${pairId}@example.com`
+        const user2Email = `worker-user2-${pairId}@example.com`
+        
+        let user1, user2
+        
+        // Check for existing user1
+        const { data: existingUser1 } = await supabase
           .from('User')
-          .insert({
-            id: uuidv4(),
-            email: `worker-user1-${pairId}@example.com`,
-            name: 'Worker User 1',
-            createdAt: now,
-            updatedAt: now
-          })
           .select()
+          .eq('email', user1Email)
           .single()
         
-        if (user1Error) throw user1Error
+        if (existingUser1) {
+          user1 = existingUser1
+        } else {
+          // Create user1
+          const now = new Date().toISOString()
+          const { data: newUser1, error: user1Error } = await supabase
+            .from('User')
+            .insert({
+              id: uuidv4(),
+              email: user1Email,
+              name: 'Worker User 1',
+              createdAt: now,
+              updatedAt: now
+            })
+            .select()
+            .single()
+          
+          if (user1Error) throw user1Error
+          user1 = newUser1
+        }
         
-        const { data: user2, error: user2Error } = await supabase
+        // Check for existing user2
+        const { data: existingUser2 } = await supabase
           .from('User')
-          .insert({
-            id: uuidv4(),
-            email: `worker-user2-${pairId}@example.com`,
-            name: 'Worker User 2',
-            createdAt: now,
-            updatedAt: now
-          })
           .select()
+          .eq('email', user2Email)
           .single()
         
-        if (user2Error) throw user2Error
+        if (existingUser2) {
+          user2 = existingUser2
+        } else {
+          // Create user2
+          const now = new Date().toISOString()
+          const { data: newUser2, error: user2Error } = await supabase
+            .from('User')
+            .insert({
+              id: uuidv4(),
+              email: user2Email,
+              name: 'Worker User 2',
+              createdAt: now,
+              updatedAt: now
+            })
+            .select()
+            .single()
+          
+          if (user2Error) throw user2Error
+          user2 = newUser2
+        }
         
         // Create the pair with the specific ID
         const { data: newPair, error: newPairError } = await supabase
