@@ -114,6 +114,7 @@ async function main() {
         }
         
         // Create the pair with the specific ID
+        const now = new Date().toISOString()
         const { data: newPair, error: newPairError } = await supabase
           .from('Pair')
           .insert({
@@ -121,6 +122,8 @@ async function main() {
             user1Id: user1.id,
             user2Id: user2.id,
             isActive: true,
+            createdAt: now,
+            updatedAt: now
           })
           .select()
           .single()
