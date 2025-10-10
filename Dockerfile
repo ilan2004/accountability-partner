@@ -17,13 +17,9 @@ COPY apps/worker ./
 # Generate Prisma client (no DB connection required)
 RUN npx prisma generate
 
-# Copy entrypoint to run migrations at container start, then start app
-COPY apps/worker/entrypoint.sh /app/apps/worker/entrypoint.sh
-RUN chmod +x /app/apps/worker/entrypoint.sh
-
 # Expose nothing (background worker)
 ENV NODE_ENV=production
 
-# Start the worker via entrypoint (runs prisma db push, then tsx)
-CMD ["/bin/bash", "/app/apps/worker/entrypoint.sh"]
+# Start the worker - run prisma db push first, then start the app
+CMD ["sh", "-c", "echo '[startup] Running Prisma DB push...' && npx prisma db push && echo '[startup] Starting worker...' && exec tsx src/index.ts"]
 
