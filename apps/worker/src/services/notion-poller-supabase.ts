@@ -202,9 +202,11 @@ export class NotionPollerService {
         }
       } else {
         // Create new task
+        const now = new Date().toISOString();
         const { data: newTask, error } = await supabase
           .from('TaskMirror')
           .insert({
+            id: uuidv4(),
             notionId: notionTask.id,
             title: notionTask.title,
             status: notionTask.status,
@@ -212,6 +214,8 @@ export class NotionPollerService {
             ownerId: user.id,
             lastEditedTime: notionTask.lastEditedTime.toISOString(),
             notionUrl: notionTask.url,
+            createdAt: now,
+            updatedAt: now,
           })
           .select()
           .single();
@@ -286,14 +290,18 @@ export class NotionPollerService {
       }
 
       // Create new event
+      const now = new Date().toISOString();
       const { error } = await supabase
         .from('TaskEvent')
         .insert({
+          id: uuidv4(),
           taskMirrorId,
           eventType,
           previousStatus,
           newStatus,
           idempotencyKey,
+          createdAt: now,
+          updatedAt: now,
         });
 
       if (error) throw error;
