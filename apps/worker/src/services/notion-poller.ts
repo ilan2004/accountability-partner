@@ -1,4 +1,4 @@
-import { prisma } from '@accountability/db';
+import { prisma } from '../lib/db';
 import pino from 'pino';
 import { NotionClient } from '../notion/client';
 import { NotionTask } from '../notion/types';

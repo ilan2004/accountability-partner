@@ -1,4 +1,4 @@
-import { prisma } from '@accountability/db';
+import { prisma } from '../lib/db';
 import cron from 'node-cron';
 import pino from 'pino';
 import { WhatsAppClient } from '../whatsapp/client';

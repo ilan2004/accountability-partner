@@ -1,6 +1,6 @@
 import { config } from 'dotenv';
 import { join } from 'path';
-import { prisma } from '@accountability/db';
+import { prisma } from './lib/db';
 
 // Load environment variables from root
 config({ path: join(__dirname, '../../../.env') });

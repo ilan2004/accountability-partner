@@ -1,15 +1,14 @@
 import { config } from 'dotenv'
-import { join } from 'path'
 import pino from 'pino'
-import { prisma } from '@accountability/db'
+import { prisma } from './lib/db'
 import { NotionClient } from './notion/client'
 import { WhatsAppClient } from './whatsapp/client'
 import { NotionPollerService } from './services/notion-poller'
 import { NotificationService } from './services/notification-service'
 import { SchedulerService } from './services/scheduler-service'
 
-// Load environment variables from root
-config({ path: join(__dirname, '../../../.env') })
+// Load environment variables
+config()
 
 const logger = pino({ level: 'info', name: 'worker-main' })
 

@@ -1,4 +1,4 @@
-import { TaskMirror, User, TaskEvent } from '@accountability/db';
+import { TaskMirror, User, TaskEvent } from '../lib/db';
 
 export interface NotificationContext {
   event: TaskEvent;

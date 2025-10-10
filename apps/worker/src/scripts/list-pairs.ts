@@ -1,4 +1,4 @@
-import { prisma } from '@accountability/db';
+import { prisma } from '../lib/db';
 
 (async () => {
   const pairs = await prisma.pair.findMany({

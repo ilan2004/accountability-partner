@@ -1,4 +1,4 @@
-import { prisma, Prisma } from '@accountability/db';
+import { prisma, Prisma } from '../lib/db';
 import pino from 'pino';
 import { WhatsAppClient } from '../whatsapp/client';
 import { MessageFormatter } from './message-formatter';

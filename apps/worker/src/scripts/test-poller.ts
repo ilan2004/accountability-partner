@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 import { join } from 'path';
 import pino from 'pino';
-import { prisma } from '@accountability/db';
+import { prisma } from '../lib/db';
 import { NotionClient } from '../notion/client';
 import { NotionPollerService } from '../services/notion-poller';
 
