@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies using npm (simpler than pnpm for Railway)
-RUN npm install --production
+# Install all dependencies (including devDependencies like tsx)
+RUN npm install
 
 # Copy source code
 COPY . .
