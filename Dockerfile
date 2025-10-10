@@ -21,5 +21,5 @@ RUN npx prisma generate
 ENV NODE_ENV=production
 
 # Start the worker - run prisma db push first, then start the app
-CMD ["sh", "-c", "echo '[startup] Running Prisma DB push...' && npx prisma db push && echo '[startup] Starting worker...' && exec tsx src/index.ts"]
+CMD ["sh", "-c", "echo '[startup] Running Prisma DB push...' && npx prisma db push && echo '[startup] Starting worker...' && exec npx tsx src/index.ts"]
 
