@@ -52,12 +52,15 @@ async function main() {
         logger.info({ pairId }, 'Creating dummy users and pair for worker setup...')
         
         // Create two dummy users for the pair using manual UUID generation
+        const now = new Date().toISOString()
         const { data: user1, error: user1Error } = await supabase
           .from('User')
           .insert({
             id: uuidv4(),
             email: `worker-user1-${pairId}@example.com`,
             name: 'Worker User 1',
+            createdAt: now,
+            updatedAt: now
           })
           .select()
           .single()
@@ -70,6 +73,8 @@ async function main() {
             id: uuidv4(),
             email: `worker-user2-${pairId}@example.com`,
             name: 'Worker User 2',
+            createdAt: now,
+            updatedAt: now
           })
           .select()
           .single()
