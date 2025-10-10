@@ -25,5 +25,5 @@ RUN chmod +x /app/apps/worker/entrypoint.sh
 ENV NODE_ENV=production
 
 # Start the worker via entrypoint (runs prisma db push, then tsx)
-CMD ["/bin/sh", "/app/apps/worker/entrypoint.sh"]
+CMD ["/bin/bash", "/app/apps/worker/entrypoint.sh"]
 

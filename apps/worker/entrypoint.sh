@@ -1,10 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 echo "[entrypoint] Current working directory: $(pwd)"
 echo "[entrypoint] DATABASE_URL is set: ${DATABASE_URL:+Yes}"
 echo "[entrypoint] DATABASE_URL length: ${#DATABASE_URL}"
 echo "[entrypoint] Running Prisma DB push..."
 npx prisma db push
-if [ $? -eq 0 ]; then
+RESULT=$?
+if [ $RESULT -eq 0 ]; then
   echo "[entrypoint] Prisma DB push completed successfully"
 else
   echo "[entrypoint] ERROR: Prisma DB push failed!"
@@ -13,4 +14,3 @@ else
 fi
 echo "[entrypoint] Starting worker..."
 exec tsx src/index.ts
-
