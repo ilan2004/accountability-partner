@@ -8,7 +8,7 @@ import { DailySummaryScheduler } from './daily-summary-scheduler-supabase';
 const logger = pino({ name: 'scheduler-service' });
 
 export interface SchedulerServiceConfig {
-  whatsappClient: WhatsAppClient;
+  whatsappClient: WhatsAppClient | null;
   pairId: string;
   timezone?: string;
   warningTime?: string;
@@ -16,15 +16,15 @@ export interface SchedulerServiceConfig {
 }
 
 export class SchedulerService {
-  private whatsappClient: WhatsAppClient;
+  private whatsappClient: WhatsAppClient | null;
   private pairId: string;
   private timezone: string;
   private warningTime: string;
   private summaryTime: string;
   private warningTask: cron.ScheduledTask | null = null;
   private summaryTask: cron.ScheduledTask | null = null;
-  private warningScheduler: WarningScheduler;
-  private summaryScheduler: DailySummaryScheduler;
+  private warningScheduler: WarningScheduler | null = null;
+  private summaryScheduler: DailySummaryScheduler | null = null;
 
   constructor(config: SchedulerServiceConfig) {
     this.whatsappClient = config.whatsappClient;
@@ -33,22 +33,31 @@ export class SchedulerService {
     this.warningTime = config.warningTime || '20:00';
     this.summaryTime = config.summaryTime || '23:55';
 
-    // Initialize schedulers
-    this.warningScheduler = new WarningScheduler({
-      whatsappClient: this.whatsappClient,
-      pairId: this.pairId,
-    });
+    // Initialize schedulers (only if WhatsApp client is available)
+    if (this.whatsappClient) {
+      this.warningScheduler = new WarningScheduler({
+        whatsappClient: this.whatsappClient,
+        pairId: this.pairId,
+      });
 
-    this.summaryScheduler = new DailySummaryScheduler({
-      whatsappClient: this.whatsappClient,
-      pairId: this.pairId,
-    });
+      this.summaryScheduler = new DailySummaryScheduler({
+        whatsappClient: this.whatsappClient,
+        pairId: this.pairId,
+      });
+    } else {
+      logger.warn('WhatsApp client not available, scheduler will be disabled');
+    }
   }
 
   /**
    * Start scheduled tasks
    */
   async start(): Promise<void> {
+    if (!this.whatsappClient) {
+      logger.info('Scheduler service disabled - WhatsApp client not available');
+      return;
+    }
+
     logger.info('Starting scheduler service');
 
     // Load settings from database
@@ -138,6 +147,9 @@ export class SchedulerService {
    * Manually trigger warning (for testing)
    */
   async triggerWarning(): Promise<void> {
+    if (!this.warningScheduler) {
+      throw new Error('Warning scheduler not available - WhatsApp client not initialized');
+    }
     logger.info('Manually triggering warning');
     await this.warningScheduler.sendWarning();
   }
@@ -146,6 +158,9 @@ export class SchedulerService {
    * Manually trigger daily summary (for testing)
    */
   async triggerSummary(): Promise<void> {
+    if (!this.summaryScheduler) {
+      throw new Error('Summary scheduler not available - WhatsApp client not initialized');
+    }
     logger.info('Manually triggering daily summary');
     await this.summaryScheduler.sendDailySummary();
   }

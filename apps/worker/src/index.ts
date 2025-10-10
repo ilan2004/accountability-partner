@@ -164,13 +164,28 @@ async function main() {
     rateLimitDelay: Number(process.env.NOTION_RATE_LIMIT_DELAY_MS || 1000),
   })
 
-  // Initialize WhatsApp client
-  const waClient = new WhatsAppClient({
-    sessionName: process.env.WA_SESSION_NAME || 'accountability-bot',
-    authPath: process.env.WA_AUTH_PATH || './auth',
-    printQR: process.env.WA_PRINT_QR !== 'false',
-  })
-  await waClient.connect()
+  // Initialize WhatsApp client (optional)
+  let waClient: WhatsAppClient | null = null
+  const waEnabled = process.env.WA_ENABLED !== 'false'
+  
+  if (waEnabled) {
+    try {
+      logger.info('Initializing WhatsApp client...')
+      waClient = new WhatsAppClient({
+        sessionName: process.env.WA_SESSION_NAME || 'accountability-bot',
+        authPath: process.env.WA_AUTH_PATH || './auth',
+        printQR: process.env.WA_PRINT_QR !== 'false',
+      })
+      await waClient.connect()
+      logger.info('✅ WhatsApp client initialized successfully')
+    } catch (waError) {
+      logger.warn('⚠️ WhatsApp client failed to initialize:', waError)
+      logger.info('Continuing without WhatsApp notifications...')
+      waClient = null
+    }
+  } else {
+    logger.info('WhatsApp disabled via WA_ENABLED=false')
+  }
 
   // Initialize services
   const poller = new NotionPollerService({

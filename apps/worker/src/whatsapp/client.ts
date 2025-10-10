@@ -47,9 +47,20 @@ export class WhatsAppClient {
    */
   async connect(): Promise<void> {
     try {
-      // Get auth state from files
+      // Check if auth path exists and is accessible
       const authPath = join(process.cwd(), this.config.authPath!, this.config.sessionName!);
-      const { state, saveCreds } = await useMultiFileAuthState(authPath);
+      logger.info(`Attempting WhatsApp connection with auth path: ${authPath}`);
+      
+      let state, saveCreds;
+      try {
+        const authResult = await useMultiFileAuthState(authPath);
+        state = authResult.state;
+        saveCreds = authResult.saveCreds;
+        logger.info('Successfully loaded authentication state');
+      } catch (authError) {
+        logger.warn('Failed to load authentication state:', authError);
+        throw new Error('Authentication files not accessible or corrupted');
+      }
 
       // Get latest version
       const { version, isLatest } = await fetchLatestBaileysVersion();
@@ -58,10 +69,12 @@ export class WhatsAppClient {
       // Create a promise that resolves when connected or rejects on failure
       const connectionPromise = new Promise<void>((resolve, reject) => {
         let isResolved = false;
+        let connectionTimer: NodeJS.Timeout;
 
         const resolveOnce = () => {
           if (!isResolved) {
             isResolved = true;
+            if (connectionTimer) clearTimeout(connectionTimer);
             resolve();
           }
         };
@@ -69,57 +82,99 @@ export class WhatsAppClient {
         const rejectOnce = (error: Error) => {
           if (!isResolved) {
             isResolved = true;
+            if (connectionTimer) clearTimeout(connectionTimer);
             reject(error);
           }
         };
 
-        // Create socket
-        this.socket = makeWASocket({
-          version,
-          logger: pino({ level: 'silent' }),
-          printQRInTerminal: false,
-          auth: state,
-          generateHighQualityLinkPreview: false,
-        });
+        try {
+          // Create socket
+          this.socket = makeWASocket({
+            version,
+            logger: pino({ level: 'silent' }),
+            printQRInTerminal: false,
+            auth: state,
+            generateHighQualityLinkPreview: false,
+            connectTimeoutMs: 30000, // 30 second connection timeout
+          });
 
-        // Handle connection updates
-        this.socket.ev.on('connection.update', async (update) => {
-          await this.handleConnectionUpdate(update);
-          
-          // Resolve the promise when connected
-          if (update.connection === 'open') {
-            resolveOnce();
-          } else if (update.connection === 'close') {
-            const reason = (update.lastDisconnect?.error as Boom)?.output?.statusCode;
-            if (reason === DisconnectReason.loggedOut) {
-              rejectOnce(new Error('Logged out from WhatsApp. Please re-authenticate.'));
+          logger.info('WhatsApp socket created, waiting for connection...');
+
+          // Handle connection updates
+          this.socket.ev.on('connection.update', async (update) => {
+            logger.info('Connection update received:', {
+              connection: update.connection,
+              receivedPendingNotifications: update.receivedPendingNotifications,
+              isOnline: update.isOnline,
+              isNewLogin: update.isNewLogin
+            });
+            
+            await this.handleConnectionUpdate(update);
+            
+            // Resolve the promise when connected
+            if (update.connection === 'open') {
+              logger.info('WhatsApp connection established successfully');
+              resolveOnce();
+            } else if (update.connection === 'close') {
+              const reason = (update.lastDisconnect?.error as Boom)?.output?.statusCode;
+              const errorMessage = update.lastDisconnect?.error?.message || 'Unknown error';
+              
+              logger.warn(`Connection closed. Reason code: ${reason}, Error: ${errorMessage}`);
+              
+              if (reason === DisconnectReason.loggedOut) {
+                rejectOnce(new Error('Logged out from WhatsApp. Authentication required.'));
+              } else if (reason === DisconnectReason.badSession) {
+                rejectOnce(new Error('Bad WhatsApp session. Re-authentication required.'));
+              } else if (reason === DisconnectReason.timedOut) {
+                rejectOnce(new Error('WhatsApp connection timed out. Network or server issues.'));
+              } else {
+                rejectOnce(new Error(`WhatsApp connection failed: ${errorMessage}`));
+              }
             }
-          }
-        });
+          });
 
-        // Handle credential updates
-        this.socket.ev.on('creds.update', saveCreds);
+          // Handle credential updates
+          this.socket.ev.on('creds.update', saveCreds);
 
-        // Handle messages (for debugging)
-        this.socket.ev.on('messages.upsert', async (m) => {
-          const msg = m.messages[0];
-          if (!msg.key.fromMe && m.type === 'notify') {
-            logger.debug('Received message:', msg);
-          }
-        });
+          // Handle messages (for debugging)
+          this.socket.ev.on('messages.upsert', async (m) => {
+            const msg = m.messages[0];
+            if (!msg.key.fromMe && m.type === 'notify') {
+              logger.debug('Received message:', { from: msg.key.remoteJid, id: msg.key.id });
+            }
+          });
 
-        // Set a timeout to avoid hanging forever
-        setTimeout(() => {
-          rejectOnce(new Error('Connection timeout after 60 seconds'));
-        }, 60000);
+          // Set a timeout to avoid hanging forever (increased to 90 seconds)
+          connectionTimer = setTimeout(() => {
+            rejectOnce(new Error('WhatsApp connection timeout after 90 seconds. This may indicate network issues or that re-authentication is required.'));
+          }, 90000);
+          
+        } catch (socketError) {
+          logger.error('Failed to create WhatsApp socket:', socketError);
+          rejectOnce(new Error(`Failed to initialize WhatsApp socket: ${socketError.message}`));
+        }
       });
 
-      logger.info('WhatsApp client initialized');
+      logger.info('WhatsApp client initialized, establishing connection...');
       
       // Wait for connection to be established
       await connectionPromise;
+      logger.info('✅ WhatsApp client connected successfully');
+      
     } catch (error) {
       logger.error('Failed to initialize WhatsApp client:', error);
+      
+      // Clean up any partial socket creation
+      if (this.socket) {
+        try {
+          this.socket.ev.removeAllListeners();
+          this.socket.ws.close();
+        } catch (cleanupError) {
+          logger.warn('Error during WhatsApp socket cleanup:', cleanupError);
+        }
+        this.socket = null;
+      }
+      
       throw error;
     }
   }

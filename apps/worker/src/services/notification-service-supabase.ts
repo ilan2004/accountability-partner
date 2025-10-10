@@ -7,7 +7,7 @@ import { sleep } from './utils';
 const logger = pino({ name: 'notification-service' });
 
 export interface NotificationServiceConfig {
-  whatsappClient: WhatsAppClient;
+  whatsappClient: WhatsAppClient | null;
   pairId: string;
   processInterval?: number; // milliseconds
   maxRetries?: number;
@@ -15,7 +15,7 @@ export interface NotificationServiceConfig {
 }
 
 export class NotificationService {
-  private whatsappClient: WhatsAppClient;
+  private whatsappClient: WhatsAppClient | null;
   private pairId: string;
   private formatter: MessageFormatter;
   private isRunning = false;
@@ -220,6 +220,23 @@ export class NotificationService {
     const message = event.eventType === 'completed'
       ? this.formatter.formatCompletedMessage(context)
       : this.formatter.formatMessage(context);
+
+    // Check if WhatsApp client is available
+    if (!this.whatsappClient) {
+      logger.warn({ notificationId }, 'WhatsApp client not available, marking notification as failed');
+      
+      // Mark as failed since we can't send
+      const { error } = await supabase
+        .from('Notification')
+        .update({ 
+          status: 'failed',
+          lastError: 'WhatsApp client not available' 
+        })
+        .eq('id', notificationId);
+
+      if (error) logger.error({ error }, 'Failed to mark notification as failed');
+      throw new Error('WhatsApp client not available');
+    }
 
     // Send with exponential backoff on failure
     let lastError: Error | null = null;
