@@ -134,12 +134,16 @@ async function main() {
       }
       
       // Now create the NotionConfig
+      const now = new Date().toISOString()
       const { data: newNotionConfig, error: configError } = await supabase
         .from('NotionConfig')
         .insert({
+          id: uuidv4(),
           pairId,
           databaseId: notionDatabaseId,
           integrationToken: notionToken,
+          createdAt: now,
+          updatedAt: now
         })
         .select()
         .single()
