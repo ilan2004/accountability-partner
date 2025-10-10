@@ -39,9 +39,7 @@ async function main() {
     process.exit(1)
   }
 
-  // Ensure database schema exists before any queries
-  await ensurePrismaSchema()
-
+// Database schema is ensured by entrypoint.sh, so we can proceed directly
   // Fetch Notion configuration for the pair
   const notionConfig = await prisma.notionConfig.findUnique({ where: { pairId } })
   if (!notionConfig) {
