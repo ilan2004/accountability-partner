@@ -3,7 +3,7 @@ echo "[entrypoint] Current working directory: $(pwd)"
 echo "[entrypoint] DATABASE_URL is set: ${DATABASE_URL:+Yes}"
 echo "[entrypoint] DATABASE_URL length: ${#DATABASE_URL}"
 echo "[entrypoint] Running Prisma DB push..."
-npx prisma db push --accept-data-loss
+npx prisma db push
 if [ $? -eq 0 ]; then
   echo "[entrypoint] Prisma DB push completed successfully"
 else
