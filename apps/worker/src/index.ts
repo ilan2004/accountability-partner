@@ -43,7 +43,7 @@ async function main() {
   // Fetch or create Notion configuration for the pair
   let notionConfig = await prisma.notionConfig.findUnique({ where: { pairId } })
   if (!notionConfig) {
-    logger.info({ pairId }, 'No NotionConfig found for pair, attempting to create one...')
+    logger.info({ pairId }, 'No NotionConfig found for pair, attempting to create setup...')
     
     const notionToken = process.env.NOTION_TOKEN
     const notionDatabaseId = process.env.NOTION_DATABASE_ID
@@ -54,6 +54,40 @@ async function main() {
     }
     
     try {
+      // First ensure the Pair exists (create dummy users and pair for worker-only setup)
+      let pair = await prisma.pair.findUnique({ where: { id: pairId } })
+      if (!pair) {
+        logger.info({ pairId }, 'Creating dummy users and pair for worker setup...')
+        
+        // Create two dummy users for the pair
+        const user1 = await prisma.user.create({
+          data: {
+            email: `worker-user1-${pairId}@example.com`,
+            name: 'Worker User 1',
+          }
+        })
+        
+        const user2 = await prisma.user.create({
+          data: {
+            email: `worker-user2-${pairId}@example.com`,
+            name: 'Worker User 2',
+          }
+        })
+        
+        // Create the pair with the specific ID
+        pair = await prisma.pair.create({
+          data: {
+            id: pairId,
+            user1Id: user1.id,
+            user2Id: user2.id,
+            isActive: true,
+          }
+        })
+        
+        logger.info({ pairId, user1Id: user1.id, user2Id: user2.id }, 'Created dummy pair for worker setup')
+      }
+      
+      // Now create the NotionConfig
       notionConfig = await prisma.notionConfig.create({
         data: {
           pairId,
@@ -63,7 +97,7 @@ async function main() {
       })
       logger.info({ pairId, configId: notionConfig.id }, 'Created NotionConfig successfully')
     } catch (error) {
-      logger.error({ pairId, error }, 'Failed to create NotionConfig')
+      logger.error({ pairId, error }, 'Failed to create setup')
       process.exit(1)
     }
   }
