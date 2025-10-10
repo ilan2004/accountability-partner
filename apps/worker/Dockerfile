@@ -4,23 +4,23 @@ FROM node:20-alpine
 # Install unzip for auth file extraction
 RUN apk add --no-cache unzip
 
-# Set working directory
+# Set working directory to worker app
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy worker package files
+COPY apps/worker/package*.json ./
 
 # Install all dependencies (including devDependencies like tsx)
 RUN npm install
 
-# Copy source code
-COPY . .
+# Copy worker source code
+COPY apps/worker ./
 
-# Create auth directory for WhatsApp
-RUN mkdir -p auth-temp
+# Create auth directory for WhatsApp (mapped to volume)
+RUN mkdir -p /app/auth
 
 # Set environment
 ENV NODE_ENV=production
 
-# Start the application
+# Start the worker application
 CMD ["npm", "start"]
