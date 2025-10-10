@@ -3,6 +3,7 @@ import pino from 'pino';
 import { NotionClient } from '../notion/client';
 import { NotionTask } from '../notion/types';
 import { generateIdempotencyKey, sleep } from './utils';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = pino({ name: 'notion-poller' });
 
@@ -144,12 +145,16 @@ export class NotionPollerService {
         } else {
           // Create new user
           logger.warn(`Creating new user for Notion ID: ${notionTask.ownerNotionId}`);
+          const now = new Date().toISOString();
           const { data: newUser, error } = await supabase
             .from('User')
             .insert({
+              id: uuidv4(),
               name: notionTask.ownerName || 'Unknown User',
               email: `${notionTask.ownerNotionId}@notion.placeholder`,
               notionId: notionTask.ownerNotionId,
+              createdAt: now,
+              updatedAt: now,
             })
             .select()
             .single();
