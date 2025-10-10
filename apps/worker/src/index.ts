@@ -39,12 +39,33 @@ async function main() {
     process.exit(1)
   }
 
-// Database schema is ensured by entrypoint.sh, so we can proceed directly
-  // Fetch Notion configuration for the pair
-  const notionConfig = await prisma.notionConfig.findUnique({ where: { pairId } })
+  // Database schema is ensured by entrypoint.sh, so we can proceed directly
+  // Fetch or create Notion configuration for the pair
+  let notionConfig = await prisma.notionConfig.findUnique({ where: { pairId } })
   if (!notionConfig) {
-    logger.error({ pairId }, 'No NotionConfig found for pair')
-    process.exit(1)
+    logger.info({ pairId }, 'No NotionConfig found for pair, attempting to create one...')
+    
+    const notionToken = process.env.NOTION_TOKEN
+    const notionDatabaseId = process.env.NOTION_DATABASE_ID
+    
+    if (!notionToken || !notionDatabaseId) {
+      logger.error({ pairId }, 'NOTION_TOKEN and NOTION_DATABASE_ID environment variables are required to create NotionConfig')
+      process.exit(1)
+    }
+    
+    try {
+      notionConfig = await prisma.notionConfig.create({
+        data: {
+          pairId,
+          databaseId: notionDatabaseId,
+          integrationToken: notionToken,
+        }
+      })
+      logger.info({ pairId, configId: notionConfig.id }, 'Created NotionConfig successfully')
+    } catch (error) {
+      logger.error({ pairId, error }, 'Failed to create NotionConfig')
+      process.exit(1)
+    }
   }
 
   // Initialize Notion client (with conservative rate limit handling)
