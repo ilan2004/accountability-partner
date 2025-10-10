@@ -6,9 +6,7 @@ import { NotionClient } from './notion/client'
 import { WhatsAppClient } from './whatsapp/client'
 import { NotionPollerService } from './services/notion-poller-supabase'
 import { NotificationService } from './services/notification-service-supabase'
-// Temporarily disabled for Supabase migration
-// import { SchedulerService } from './services/scheduler-service'
-// import { WarnScheduler } from './services/warning-scheduler'
+import { SchedulerService } from './services/scheduler-service'
 // Load environment variables
 config()
 
@@ -190,16 +188,15 @@ async function main() {
     retryDelay: Number(process.env.NOTIFY_RETRY_BASE_DELAY_MS || 1000),
   })
 
-  // TODO: Scheduler service temporarily disabled during Supabase migration
-  // const scheduler = new SchedulerService({
-  //   whatsappClient: waClient,
-  //   pairId,
-  // })
+  const scheduler = new SchedulerService({
+    whatsappClient: waClient,
+    pairId,
+  })
 
   // Start services
   await poller.start()
   await notifier.start()
-  // await scheduler.start() // Temporarily disabled
+  await scheduler.start()
 
   logger.info('✅ Worker running successfully!')
 
@@ -208,7 +205,7 @@ async function main() {
     logger.info('Shutting down worker...')
     try {
       notifier.stop()
-      // scheduler.stop() // Temporarily disabled
+      scheduler.stop()
       await waClient.disconnect()
     } catch (e) {
       logger.error({ e }, 'Error during shutdown')

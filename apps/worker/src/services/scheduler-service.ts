@@ -2,8 +2,8 @@ import { SupabaseWorkerHelpers } from '../lib/supabase';
 import cron from 'node-cron';
 import pino from 'pino';
 import { WhatsAppClient } from '../whatsapp/client';
-import { WarningScheduler } from './warning-scheduler';
-import { DailySummaryScheduler } from './daily-summary-scheduler';
+import { WarningScheduler } from './warning-scheduler-supabase';
+import { DailySummaryScheduler } from './daily-summary-scheduler-supabase';
 
 const logger = pino({ name: 'scheduler-service' });
 

@@ -460,4 +460,100 @@ export class SupabaseWorkerHelpers {
     
     return data;
   }
+
+  static async getPairById(pairId: string): Promise<PairRow | null> {
+    const { data, error } = await supabase
+      .from('Pair')
+      .select('*')
+      .eq('id', pairId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+    
+    return data;
+  }
+
+  static async getUserById(userId: string): Promise<UserRow | null> {
+    const { data, error } = await supabase
+      .from('User')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+    
+    return data;
+  }
+
+  static async getTasksDueToday(pairId: string, todayStart: Date, todayEnd: Date): Promise<TaskMirrorRow[]> {
+    // Get the pair to find user IDs
+    const pair = await this.getPairById(pairId);
+    if (!pair) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('TaskMirror')
+      .select(`
+        *,
+        owner:User(*)
+      `)
+      .gte('dueDate', todayStart.toISOString())
+      .lte('dueDate', todayEnd.toISOString())
+      .neq('status', 'Done')
+      .in('ownerId', [pair.user1Id, pair.user2Id])
+      .order('ownerId', { ascending: true })
+      .order('dueDate', { ascending: true });
+    
+    if (error) {
+      throw error;
+    }
+    
+    return data || [];
+  }
+
+  static async getAllTasksForPair(pairId: string): Promise<TaskMirrorRow[]> {
+    // Get the pair to find user IDs
+    const pair = await this.getPairById(pairId);
+    if (!pair) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('TaskMirror')
+      .select(`
+        *,
+        owner:User(*)
+      `)
+      .in('ownerId', [pair.user1Id, pair.user2Id])
+      .order('ownerId', { ascending: true })
+      .order('createdAt', { ascending: true });
+    
+    if (error) {
+      throw error;
+    }
+    
+    return data || [];
+  }
+
+  static async getTaskEventsForTaskCompletedToday(taskId: string, todayStart: Date, todayEnd: Date): Promise<TaskEventRow[]> {
+    const { data, error } = await supabase
+      .from('TaskEvent')
+      .select('*')
+      .eq('taskMirrorId', taskId)
+      .eq('eventType', 'completed')
+      .gte('createdAt', todayStart.toISOString())
+      .lte('createdAt', todayEnd.toISOString())
+      .order('createdAt', { ascending: true });
+    
+    if (error) {
+      throw error;
+    }
+    
+    return data || [];
+  }
 }
