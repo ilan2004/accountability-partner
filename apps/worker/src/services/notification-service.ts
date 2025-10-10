@@ -91,7 +91,7 @@ export class NotificationService {
         processedAt: null,
         taskMirror: {
           owner: {
-            pairAsUser1: { id: this.pairId },
+            pairAsUser1Id: this.pairId,
           },
         },
       },
@@ -114,7 +114,7 @@ export class NotificationService {
         processedAt: null,
         taskMirror: {
           owner: {
-            pairAsUser2: { id: this.pairId },
+            pairAsUser2Id: this.pairId,
           },
         },
       },
