@@ -19,7 +19,8 @@
     "notify:once": "tsx src/scripts/notify-once.ts",
     "schedule:test": "tsx src/scripts/test-schedulers.ts",
     "send:warning": "tsx src/scripts/send-warning.ts",
-    "send:summary": "tsx src/scripts/send-summary.ts"
+    "send:summary": "tsx src/scripts/send-summary.ts",
+    "inspect:notion": "tsx src/scripts/inspect-notion.ts"
   },
   "dependencies": {
     "@accountability/db": "workspace:*",

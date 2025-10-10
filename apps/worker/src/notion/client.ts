@@ -96,21 +96,29 @@ export class NotionClient {
   private parseTask(page: PageObjectResponse & { properties: NotionTaskProperties }): NotionTask {
     const props = page.properties;
 
-    // Extract title
-    const title = props.Title.title
+    // Extract title from 'Task name' property
+    const title = props['Task name'].title
       .map(text => text.text.content)
       .join('') || 'Untitled';
 
-    // Extract status
-    const status = props.Status.status?.name || 'Todo';
+    // Extract status (map to our expected values)
+    const status = props.Status.status?.name || 'Not started';
 
-    // Extract due date
-    const dueDate = props.Due.date ? new Date(props.Due.date.start) : null;
+    // Extract due date from 'Due date' property
+    const dueDate = props['Due date'].date ? new Date(props['Due date'].date.start) : null;
 
-    // Extract owner
-    const owner = props.Owner.people[0];
+    // Extract owner from 'Assignee' property
+    const owner = props.Assignee.people[0];
     const ownerNotionId = owner?.id || null;
     const ownerName = owner?.name || null;
+
+    // Extract additional fields
+    const priority = props.Priority.select?.name || undefined;
+    const description = props.Description.rich_text
+      .map(text => text.text.content)
+      .join('') || undefined;
+    const effortLevel = props['Effort level'].select?.name || undefined;
+    const taskTypes = props['Task type'].multi_select.map(item => item.name);
 
     // Last edited time
     const lastEditedTime = new Date(page.last_edited_time);
@@ -127,6 +135,10 @@ export class NotionClient {
       ownerName,
       lastEditedTime,
       url,
+      priority,
+      description,
+      effortLevel,
+      taskTypes,
     };
   }
 

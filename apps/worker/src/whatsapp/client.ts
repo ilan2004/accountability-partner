@@ -55,32 +55,69 @@ export class WhatsAppClient {
       const { version, isLatest } = await fetchLatestBaileysVersion();
       logger.info(`Using Baileys v${version}${isLatest ? ' (latest)' : ''}`);
 
-      // Create socket
-      this.socket = makeWASocket({
-        version,
-        logger: pino({ level: 'silent' }),
-        printQRInTerminal: false,
-        auth: state,
-        generateHighQualityLinkPreview: false,
-      });
+      // Create a promise that resolves when connected or rejects on failure
+      const connectionPromise = new Promise<void>((resolve, reject) => {
+        let isResolved = false;
 
-      // Handle connection updates
-      this.socket.ev.on('connection.update', async (update) => {
-        await this.handleConnectionUpdate(update);
-      });
+        const resolveOnce = () => {
+          if (!isResolved) {
+            isResolved = true;
+            resolve();
+          }
+        };
 
-      // Handle credential updates
-      this.socket.ev.on('creds.update', saveCreds);
+        const rejectOnce = (error: Error) => {
+          if (!isResolved) {
+            isResolved = true;
+            reject(error);
+          }
+        };
 
-      // Handle messages (for debugging)
-      this.socket.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0];
-        if (!msg.key.fromMe && m.type === 'notify') {
-          logger.debug('Received message:', msg);
-        }
+        // Create socket
+        this.socket = makeWASocket({
+          version,
+          logger: pino({ level: 'silent' }),
+          printQRInTerminal: false,
+          auth: state,
+          generateHighQualityLinkPreview: false,
+        });
+
+        // Handle connection updates
+        this.socket.ev.on('connection.update', async (update) => {
+          await this.handleConnectionUpdate(update);
+          
+          // Resolve the promise when connected
+          if (update.connection === 'open') {
+            resolveOnce();
+          } else if (update.connection === 'close') {
+            const reason = (update.lastDisconnect?.error as Boom)?.output?.statusCode;
+            if (reason === DisconnectReason.loggedOut) {
+              rejectOnce(new Error('Logged out from WhatsApp. Please re-authenticate.'));
+            }
+          }
+        });
+
+        // Handle credential updates
+        this.socket.ev.on('creds.update', saveCreds);
+
+        // Handle messages (for debugging)
+        this.socket.ev.on('messages.upsert', async (m) => {
+          const msg = m.messages[0];
+          if (!msg.key.fromMe && m.type === 'notify') {
+            logger.debug('Received message:', msg);
+          }
+        });
+
+        // Set a timeout to avoid hanging forever
+        setTimeout(() => {
+          rejectOnce(new Error('Connection timeout after 60 seconds'));
+        }, 60000);
       });
 
       logger.info('WhatsApp client initialized');
+      
+      // Wait for connection to be established
+      await connectionPromise;
     } catch (error) {
       logger.error('Failed to initialize WhatsApp client:', error);
       throw error;
@@ -178,7 +215,20 @@ export class WhatsAppClient {
     }
 
     try {
-      const groups = await this.socket.groupFetchAllParticipating();
+      logger.info('Fetching WhatsApp groups...');
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Group fetch timeout after 30 seconds'));
+        }, 30000);
+      });
+      
+      const groupsPromise = this.socket.groupFetchAllParticipating();
+      
+      const groups = await Promise.race([groupsPromise, timeoutPromise]);
+      
+      logger.info(`Successfully fetched ${Object.keys(groups).length} groups`);
       
       return Object.values(groups).map(group => ({
         id: group.id,

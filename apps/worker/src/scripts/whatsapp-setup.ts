@@ -8,12 +8,22 @@
  */
 
 import { config } from 'dotenv';
-import { WhatsAppBot } from '../lib/whatsapp';
-import { logger } from '@accountability/shared';
+import { WhatsAppBot } from '../whatsapp';
+import pino from 'pino';
 import * as readline from 'readline';
 
 // Load environment variables
 config();
+
+const logger = pino({ 
+  level: 'info',
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true
+    }
+  }
+});
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -42,7 +52,8 @@ async function setup() {
     logger.info('\n✅ Successfully connected to WhatsApp!');
     
     // Wait a moment for connection to stabilize
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    logger.info('Waiting for connection to stabilize...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
     
     // List all groups
     logger.info('\n📋 Fetching your WhatsApp groups...\n');
@@ -89,7 +100,13 @@ async function setup() {
     }
     
   } catch (error) {
-    logger.error('Setup failed:', error);
+    logger.error('Setup failed:');
+    if (error instanceof Error) {
+      logger.error('Error message:', error.message);
+      logger.error('Error stack:', error.stack);
+    } else {
+      logger.error('Unknown error:', error);
+    }
   } finally {
     rl.close();
     await bot.disconnect();
