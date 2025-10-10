@@ -7,6 +7,7 @@ import { WhatsAppClient } from './whatsapp/client'
 import { NotionPollerService } from './services/notion-poller-supabase'
 import { NotificationService } from './services/notification-service-supabase'
 import { SchedulerService } from './services/scheduler-service'
+import { bootstrapWhatsAppAuth, cleanupAuthEnvironment } from './utils/whatsapp-bootstrap'
 // Load environment variables
 config()
 
@@ -164,6 +165,14 @@ async function main() {
     rateLimitDelay: Number(process.env.NOTION_RATE_LIMIT_DELAY_MS || 1000),
   })
 
+  // Bootstrap WhatsApp auth files if needed
+  try {
+    await bootstrapWhatsAppAuth()
+  } catch (bootstrapError) {
+    logger.warn('WhatsApp auth bootstrap failed:', bootstrapError)
+    logger.info('Continuing without WhatsApp auth bootstrap...')
+  }
+
   // Initialize WhatsApp client (optional)
   let waClient: WhatsAppClient | null = null
   const waEnabled = process.env.WA_ENABLED !== 'false'
@@ -178,6 +187,9 @@ async function main() {
       })
       await waClient.connect()
       logger.info('✅ WhatsApp client initialized successfully')
+      
+      // Clean up auth environment variable after successful connection
+      cleanupAuthEnvironment()
     } catch (waError) {
       logger.warn('⚠️ WhatsApp client failed to initialize:', waError)
       logger.info('Continuing without WhatsApp notifications...')

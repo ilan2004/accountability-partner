@@ -1,6 +1,9 @@
 # Use Node.js 20 LTS (required for WhatsApp Baileys library)
 FROM node:20-alpine
 
+# Install unzip for auth file extraction
+RUN apk add --no-cache unzip
+
 # Set working directory
 WORKDIR /app
 
