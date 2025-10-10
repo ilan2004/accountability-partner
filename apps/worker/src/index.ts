@@ -1,5 +1,6 @@
 import { config } from 'dotenv'
 import pino from 'pino'
+import { v4 as uuidv4 } from 'uuid'
 import { supabase, SupabaseWorkerHelpers, NotionConfigInsert, PairInsert, UserInsert } from './lib/supabase'
 import { NotionClient } from './notion/client'
 import { WhatsAppClient } from './whatsapp/client'
@@ -54,7 +55,7 @@ async function main() {
         const { data: user1, error: user1Error } = await supabase
           .from('User')
           .insert({
-            id: crypto.randomUUID(),
+            id: uuidv4(),
             email: `worker-user1-${pairId}@example.com`,
             name: 'Worker User 1',
           })
@@ -66,7 +67,7 @@ async function main() {
         const { data: user2, error: user2Error } = await supabase
           .from('User')
           .insert({
-            id: crypto.randomUUID(),
+            id: uuidv4(),
             email: `worker-user2-${pairId}@example.com`,
             name: 'Worker User 2',
           })
