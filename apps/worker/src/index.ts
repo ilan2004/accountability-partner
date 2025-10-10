@@ -50,10 +50,11 @@ async function main() {
       if (!pair) {
         logger.info({ pairId }, 'Creating dummy users and pair for worker setup...')
         
-        // Create two dummy users for the pair
+        // Create two dummy users for the pair using manual UUID generation
         const { data: user1, error: user1Error } = await supabase
           .from('User')
           .insert({
+            id: crypto.randomUUID(),
             email: `worker-user1-${pairId}@example.com`,
             name: 'Worker User 1',
           })
@@ -65,6 +66,7 @@ async function main() {
         const { data: user2, error: user2Error } = await supabase
           .from('User')
           .insert({
+            id: crypto.randomUUID(),
             email: `worker-user2-${pairId}@example.com`,
             name: 'Worker User 2',
           })
