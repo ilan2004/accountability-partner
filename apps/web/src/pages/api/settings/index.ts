@@ -1,28 +1,26 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@accountability/db';
+import { createServerSupabaseClient } from '@/lib/supabase';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const session = await getServerSession(req, res, authOptions);
-
-  if (!session || !session.user) {
+  const supabase = createServerSupabaseClient(req, res);
+  
+  // Get authenticated user
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   // Get user's pair
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      pairAsUser1: true,
-      pairAsUser2: true,
-    },
-  });
+  const { data: pairs } = await supabase
+    .from('Pair')
+    .select('*')
+    .or(`user1Id.eq.${user.id},user2Id.eq.${user.id}`)
+    .limit(1);
 
-  const pairId = user?.pairAsUser1?.id || user?.pairAsUser2?.id;
+  const pairId = pairs?.[0]?.id;
 
   if (!pairId) {
     return res.status(404).json({ error: 'No pair found' });
@@ -31,18 +29,18 @@ export default async function handler(
   if (req.method === 'GET') {
     try {
       // Get settings
-      const settings = await prisma.settings.findUnique({
-        where: { pairId },
-      });
+      const { data: settings } = await supabase
+        .from('Settings')
+        .select('*')
+        .eq('pairId', pairId)
+        .single();
 
       // Get Notion config
-      const notionConfig = await prisma.notionConfig.findUnique({
-        where: { pairId },
-        select: {
-          databaseId: true,
-          // Don't expose the token for security
-        },
-      });
+      const { data: notionConfig } = await supabase
+        .from('NotionConfig')
+        .select('databaseId')
+        .eq('pairId', pairId)
+        .single();
 
       return res.status(200).json({
         settings: settings || {
@@ -68,39 +66,35 @@ export default async function handler(
 
       // Update or create settings
       if (settings) {
-        await prisma.settings.upsert({
-          where: { pairId },
-          update: {
-            timezone: settings.timezone,
-            warningTime: settings.warningTime,
-            summaryTime: settings.summaryTime,
-            whatsappGroupJid: settings.whatsappGroupJid,
-            notificationTemplates: settings.notificationTemplates,
-          },
-          create: {
+        const { error: settingsError } = await supabase
+          .from('Settings')
+          .upsert({
             pairId,
             timezone: settings.timezone,
             warningTime: settings.warningTime,
             summaryTime: settings.summaryTime,
             whatsappGroupJid: settings.whatsappGroupJid,
             notificationTemplates: settings.notificationTemplates,
-          },
-        });
+          });
+
+        if (settingsError) {
+          throw settingsError;
+        }
       }
 
       // Update Notion config if provided
       if (notionConfig?.databaseId) {
-        await prisma.notionConfig.upsert({
-          where: { pairId },
-          update: {
-            databaseId: notionConfig.databaseId,
-          },
-          create: {
+        const { error: notionError } = await supabase
+          .from('NotionConfig')
+          .upsert({
             pairId,
             databaseId: notionConfig.databaseId,
             integrationToken: notionConfig.token || '',
-          },
-        });
+          });
+
+        if (notionError) {
+          throw notionError;
+        }
       }
 
       return res.status(200).json({ success: true });

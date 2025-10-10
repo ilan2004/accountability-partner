@@ -1,0 +1,48 @@
+# Include everything by default, but exclude what we don't need for Docker
+
+# Dependencies (will be installed fresh)
+node_modules
+.pnpm
+.pnp.js
+
+# Development files
+.git
+.gitignore
+*.md
+docs/
+
+# IDE files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Temporary files
+tmp
+temp
+coverage
+.nyc_output
+
+# Environment files (these will be set via Railway)
+.env*
+!.env.example
+
+# Build outputs (will be built fresh)
+dist
+build
+.next
+out
+.turbo
+
+# Important: DO NOT ignore auth files - they're needed for Docker build
+# !apps/worker/local-auth/

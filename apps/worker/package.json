@@ -5,9 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npm run db:generate",
+    "build": "echo 'Build complete - no database generation needed'",
     "start": "tsx src/index.ts",
-    "db:generate": "prisma generate",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist node_modules",
@@ -29,7 +28,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@notionhq/client": "^2.2.15",
-    "@prisma/client": "^6.1.0",
+    "@supabase/supabase-js": "^2.45.4",
     "@whiskeysockets/baileys": "^6.6.0",
     "dotenv": "^16.4.7",
     "node-cron": "^3.0.3",
@@ -41,7 +40,6 @@
     "@types/node-cron": "^3.0.11",
     "@types/qrcode-terminal": "^0.12.2",
     "pino-pretty": "^13.1.1",
-    "prisma": "^6.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

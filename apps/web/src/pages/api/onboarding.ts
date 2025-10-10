@@ -1,7 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@accountability/db'
+import { createServerSupabaseClient } from '@/lib/supabase'
 
 export default async function handler(
   req: NextApiRequest,
@@ -11,9 +9,11 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const session = await getServerSession(req, res, authOptions)
-
-  if (!session || !session.user) {
+  const supabase = createServerSupabaseClient(req, res)
+  
+  // Get authenticated user
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
@@ -25,53 +25,71 @@ export default async function handler(
 
   try {
     // Check if user already has a pair
-    const existingUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: {
-        pairAsUser1: true,
-        pairAsUser2: true,
-      },
-    })
+    const { data: existingPairs } = await supabase
+      .from('Pair')
+      .select('*')
+      .or(`user1Id.eq.${user.id},user2Id.eq.${user.id}`)
+      .limit(1)
 
-    if (existingUser?.pairAsUser1 || existingUser?.pairAsUser2) {
+    if (existingPairs && existingPairs.length > 0) {
       return res.status(400).json({ error: 'You already have a pair' })
     }
 
     // Find or create partner
-    let partner = await prisma.user.findUnique({
-      where: { email: partnerEmail },
-    })
+    let { data: partner } = await supabase
+      .from('User')
+      .select('*')
+      .eq('email', partnerEmail)
+      .single()
 
     if (!partner) {
       // Create placeholder user for partner (they'll complete profile when they sign up)
-      partner = await prisma.user.create({
-        data: {
+      const { data: newPartner, error: partnerError } = await supabase
+        .from('User')
+        .insert({
           email: partnerEmail,
           name: partnerEmail.split('@')[0], // Use email prefix as temporary name
-        },
-      })
+        })
+        .select()
+        .single()
+
+      if (partnerError) {
+        throw partnerError
+      }
+      partner = newPartner
     }
 
     // Create the pair
-    const pair = await prisma.pair.create({
-      data: {
-        user1Id: session.user.id,
+    const { data: pair, error: pairError } = await supabase
+      .from('Pair')
+      .insert({
+        user1Id: user.id,
         user2Id: partner.id,
-      },
-    })
+      })
+      .select()
+      .single()
+
+    if (pairError) {
+      throw pairError
+    }
 
     // Create Notion config
-    await prisma.notionConfig.create({
-      data: {
+    const { error: notionError } = await supabase
+      .from('NotionConfig')
+      .insert({
         pairId: pair.id,
         databaseId: notionDatabaseId,
         integrationToken: notionToken,
-      },
-    })
+      })
+
+    if (notionError) {
+      throw notionError
+    }
 
     // Create default settings
-    await prisma.settings.create({
-      data: {
+    const { error: settingsError } = await supabase
+      .from('Settings')
+      .insert({
         pairId: pair.id,
         timezone: 'Asia/Kolkata',
         warningTime: '20:00',
@@ -81,8 +99,11 @@ export default async function handler(
           created: '📝 {owner} created: {task}\nDue: {due}',
           status_changed: '📊 {owner} updated: {task}\nStatus: {previousStatus} → {newStatus}',
         }),
-      },
-    })
+      })
+
+    if (settingsError) {
+      throw settingsError
+    }
 
     // TODO: Send invitation email to partner if they're a new user
 

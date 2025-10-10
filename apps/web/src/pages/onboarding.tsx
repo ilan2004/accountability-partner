@@ -145,17 +145,21 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
     }
   }
 
-  // Check if user already has a pair
-  const { prisma } = await import('@accountability/db')
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      pairAsUser1: true,
-      pairAsUser2: true,
-    },
-  })
+  // Check if user already has a pair using Supabase
+  const { createSSRSupabaseClient } = await import('../lib/supabase')
+  const supabase = createSSRSupabaseClient(context)
+  
+  const { data: pairs, error } = await supabase
+    .from('Pair')
+    .select('*')
+    .or(`user1Id.eq.${session.user.id},user2Id.eq.${session.user.id}`)
+    .limit(1)
 
-  if (user?.pairAsUser1 || user?.pairAsUser2) {
+  if (error) {
+    console.error('Error checking for existing pair:', error)
+  }
+
+  if (pairs && pairs.length > 0) {
     // Already has a pair, redirect to dashboard
     return {
       redirect: {

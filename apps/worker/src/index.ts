@@ -1,34 +1,16 @@
 import { config } from 'dotenv'
 import pino from 'pino'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { prisma } from './lib/db'
+import { supabase, SupabaseWorkerHelpers, NotionConfigInsert, PairInsert, UserInsert } from './lib/supabase'
 import { NotionClient } from './notion/client'
 import { WhatsAppClient } from './whatsapp/client'
-import { NotionPollerService } from './services/notion-poller'
-import { NotificationService } from './services/notification-service'
+import { NotionPollerService } from './services/notion-poller-supabase'
+import { NotificationService } from './services/notification-service-supabase'
 import { SchedulerService } from './services/scheduler-service'
 
 // Load environment variables
 config()
 
 const logger = pino({ level: 'info', name: 'worker-main' })
-const execFileAsync = promisify(execFile)
-
-async function ensurePrismaSchema() {
-  try {
-    logger.info('Ensuring database schema with Prisma (db push)...')
-    // Run Prisma db push to create tables if they do not exist
-    const { stdout, stderr } = await execFileAsync('npx', ['prisma', 'db', 'push'], {
-      env: process.env,
-    })
-    if (stdout) logger.info(stdout.trim())
-    if (stderr) logger.warn(stderr.trim())
-    logger.info('Prisma schema ensured')
-  } catch (e) {
-    logger.error({ e }, 'Prisma db push failed - continuing, app may error if schema is missing')
-  }
-}
 
 async function main() {
   logger.info('🚀 Worker starting up...')
@@ -39,9 +21,8 @@ async function main() {
     process.exit(1)
   }
 
-  // Database schema is ensured by entrypoint.sh, so we can proceed directly
   // Fetch or create Notion configuration for the pair
-  let notionConfig = await prisma.notionConfig.findUnique({ where: { pairId } })
+  let notionConfig = await SupabaseWorkerHelpers.getNotionConfigByPairId(pairId)
   if (!notionConfig) {
     logger.info({ pairId }, 'No NotionConfig found for pair, attempting to create setup...')
     
@@ -55,46 +36,73 @@ async function main() {
     
     try {
       // First ensure the Pair exists (create dummy users and pair for worker-only setup)
-      let pair = await prisma.pair.findUnique({ where: { id: pairId } })
+      const { data: pair, error: pairError } = await supabase
+        .from('Pair')
+        .select('*')
+        .eq('id', pairId)
+        .single()
+      
+      if (pairError && pairError.code !== 'PGRST116') {
+        throw pairError
+      }
+      
       if (!pair) {
         logger.info({ pairId }, 'Creating dummy users and pair for worker setup...')
         
         // Create two dummy users for the pair
-        const user1 = await prisma.user.create({
-          data: {
+        const { data: user1, error: user1Error } = await supabase
+          .from('User')
+          .insert({
             email: `worker-user1-${pairId}@example.com`,
             name: 'Worker User 1',
-          }
-        })
+          })
+          .select()
+          .single()
         
-        const user2 = await prisma.user.create({
-          data: {
+        if (user1Error) throw user1Error
+        
+        const { data: user2, error: user2Error } = await supabase
+          .from('User')
+          .insert({
             email: `worker-user2-${pairId}@example.com`,
             name: 'Worker User 2',
-          }
-        })
+          })
+          .select()
+          .single()
+        
+        if (user2Error) throw user2Error
         
         // Create the pair with the specific ID
-        pair = await prisma.pair.create({
-          data: {
+        const { data: newPair, error: newPairError } = await supabase
+          .from('Pair')
+          .insert({
             id: pairId,
             user1Id: user1.id,
             user2Id: user2.id,
             isActive: true,
-          }
-        })
+          })
+          .select()
+          .single()
+        
+        if (newPairError) throw newPairError
         
         logger.info({ pairId, user1Id: user1.id, user2Id: user2.id }, 'Created dummy pair for worker setup')
       }
       
       // Now create the NotionConfig
-      notionConfig = await prisma.notionConfig.create({
-        data: {
+      const { data: newNotionConfig, error: configError } = await supabase
+        .from('NotionConfig')
+        .insert({
           pairId,
           databaseId: notionDatabaseId,
           integrationToken: notionToken,
-        }
-      })
+        })
+        .select()
+        .single()
+      
+      if (configError) throw configError
+      
+      notionConfig = newNotionConfig
       logger.info({ pairId, configId: notionConfig.id }, 'Created NotionConfig successfully')
     } catch (error) {
       logger.error({ pairId, error }, 'Failed to create setup')

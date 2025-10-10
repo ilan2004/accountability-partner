@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { prisma } from '@accountability/db';
+import { createServerSupabaseClient } from '@/lib/supabase';
 
 type Data = {
   success: boolean;
@@ -16,29 +16,46 @@ export default async function handler(
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
+  const supabase = createServerSupabaseClient(req, res);
+
   try {
     // Test database access
-    const users = await prisma.user.count();
-    const tasks = await prisma.taskMirror.count();
-    const pairs = await prisma.pair.count();
+    const [usersResult, tasksResult, pairsResult] = await Promise.all([
+      supabase.from('User').select('*', { count: 'exact', head: true }),
+      supabase.from('TaskMirror').select('*', { count: 'exact', head: true }),
+      supabase.from('Pair').select('*', { count: 'exact', head: true })
+    ]);
 
     // Get some sample data
-    const sampleUser = await prisma.user.findFirst();
-    const sampleTask = await prisma.taskMirror.findFirst({
-      include: {
-        owner: true,
-      },
-    });
+    const { data: sampleUser } = await supabase
+      .from('User')
+      .select('name, email')
+      .limit(1)
+      .single();
+
+    const { data: sampleTask } = await supabase
+      .from('TaskMirror')
+      .select(`
+        title, 
+        status,
+        owner:User!ownerId(name)
+      `)
+      .limit(1)
+      .single();
 
     const data = {
       counts: {
-        users,
-        tasks,
-        pairs,
+        users: usersResult.count || 0,
+        tasks: tasksResult.count || 0,
+        pairs: pairsResult.count || 0,
       },
       samples: {
         user: sampleUser ? { name: sampleUser.name, email: sampleUser.email } : null,
-        task: sampleTask ? { title: sampleTask.title, status: sampleTask.status, owner: sampleTask.owner.name } : null,
+        task: sampleTask ? { 
+          title: sampleTask.title, 
+          status: sampleTask.status, 
+          owner: (sampleTask.owner as any)?.name || 'Unknown'
+        } : null,
       },
     };
 

@@ -1,8 +1,6 @@
 import { GetServerSidePropsContext } from 'next';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
+import { createSSRSupabaseClient } from '@/lib/supabase';
 import Layout from '@/components/Layout';
-import { prisma } from '@accountability/db';
 import { useState } from 'react';
 import Link from 'next/link';
 
@@ -256,9 +254,11 @@ export default function Dashboard({ tasks, recentEvents, stats }: DashboardProps
 }
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const session = await getServerSession(context.req, context.res, authOptions);
+  const supabase = createSSRSupabaseClient(context);
+  
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  if (!session || !session.user) {
+  if (authError || !user) {
     return {
       redirect: {
         destination: '/auth/signin',
@@ -268,15 +268,13 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
   }
 
   // Get user's pair
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      pairAsUser1: true,
-      pairAsUser2: true,
-    },
-  });
+  const { data: pairs } = await supabase
+    .from('Pair')
+    .select('*')
+    .or(`user1Id.eq.${user.id},user2Id.eq.${user.id}`)
+    .limit(1);
 
-  const pairId = user?.pairAsUser1?.id || user?.pairAsUser2?.id;
+  const pairId = pairs?.[0]?.id;
 
   if (!pairId) {
     // User doesn't have a pair yet, redirect to onboarding
@@ -288,48 +286,33 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
     };
   }
 
-  // Fetch tasks
-  const tasks = await prisma.taskMirror.findMany({
-    where: {
-      owner: {
-        OR: [
-          { pairAsUser1: { id: pairId } },
-          { pairAsUser2: { id: pairId } },
-        ],
-      },
-    },
-    include: {
-      owner: true,
-    },
-    orderBy: {
-      dueDate: 'asc',
-    },
-  });
+  // Get the pair users to filter tasks
+  const pair = pairs[0];
+  const pairUserIds = [pair.user1Id, pair.user2Id];
+
+  // Fetch tasks for both users in the pair
+  const { data: tasks } = await supabase
+    .from('TaskMirror')
+    .select(`
+      *,
+      owner:User!ownerId(*)
+    `)
+    .in('ownerId', pairUserIds)
+    .order('dueDate', { ascending: true });
 
   // Fetch recent events
-  const recentEvents = await prisma.taskEvent.findMany({
-    where: {
-      taskMirror: {
-        owner: {
-          OR: [
-            { pairAsUser1: { id: pairId } },
-            { pairAsUser2: { id: pairId } },
-          ],
-        },
-      },
-    },
-    include: {
-      taskMirror: {
-        include: {
-          owner: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: 10,
-  });
+  const { data: recentEvents } = await supabase
+    .from('TaskEvent')
+    .select(`
+      *,
+      taskMirror:TaskMirror!taskMirrorId(
+        *,
+        owner:User!ownerId(*)
+      )
+    `)
+    .in('taskMirrorId', (tasks || []).map(t => t.id))
+    .order('createdAt', { ascending: false })
+    .limit(10);
 
   // Calculate stats
   const today = new Date();

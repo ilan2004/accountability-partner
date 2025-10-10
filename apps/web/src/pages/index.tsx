@@ -1,6 +1,5 @@
 import { GetServerSidePropsContext } from 'next'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
+import { createSSRSupabaseClient } from '@/lib/supabase'
 import Link from 'next/link'
 
 export default function Home() {
@@ -69,9 +68,11 @@ export default function Home() {
 }
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const session = await getServerSession(context.req, context.res, authOptions)
+  const supabase = createSSRSupabaseClient(context)
+  
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (session) {
+  if (user) {
     return {
       redirect: {
         destination: '/dashboard',
