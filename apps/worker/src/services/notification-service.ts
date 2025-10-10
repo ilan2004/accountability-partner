@@ -85,15 +85,11 @@ export class NotificationService {
    * Process all unsent events
    */
   async processUnsentEvents(): Promise<void> {
-    // Find events that need notifications
+    // Find ALL unprocessed events (simplified approach)
+    // Since this is a single-user accountability bot, we'll process all events
     const events = await prisma.taskEvent.findMany({
       where: {
         processedAt: null,
-        taskMirror: {
-          owner: {
-            pairAsUser1Id: this.pairId,
-          },
-        },
       },
       include: {
         taskMirror: {
@@ -108,38 +104,13 @@ export class NotificationService {
       take: 10, // Process up to 10 events at a time
     });
 
-    // Also check for user2
-    const eventsUser2 = await prisma.taskEvent.findMany({
-      where: {
-        processedAt: null,
-        taskMirror: {
-          owner: {
-            pairAsUser2Id: this.pairId,
-          },
-        },
-      },
-      include: {
-        taskMirror: {
-          include: {
-            owner: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-      take: 10,
-    });
-
-    const allEvents = [...events, ...eventsUser2];
-
-    if (allEvents.length === 0) {
+    if (events.length === 0) {
       return;
     }
 
-    logger.info(`Processing ${allEvents.length} events`);
+    logger.info(`Processing ${events.length} events`);
 
-    for (const event of allEvents) {
+    for (const event of events) {
       try {
         await this.processEvent(event);
       } catch (error) {
