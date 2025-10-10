@@ -1,4 +1,4 @@
-import { prisma } from '../lib/db';
+import { SupabaseWorkerHelpers } from '../lib/supabase';
 import cron from 'node-cron';
 import pino from 'pino';
 import { WhatsAppClient } from '../whatsapp/client';
@@ -112,9 +112,7 @@ export class SchedulerService {
    * Load settings from database
    */
   private async loadSettings(): Promise<void> {
-    const settings = await prisma.settings.findUnique({
-      where: { pairId: this.pairId },
-    });
+    const settings = await SupabaseWorkerHelpers.getSettingsByPairId(this.pairId);
 
     if (settings) {
       this.timezone = settings.timezone;

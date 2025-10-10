@@ -142,15 +142,16 @@ async function main() {
     retryDelay: Number(process.env.NOTIFY_RETRY_BASE_DELAY_MS || 1000),
   })
 
-  const scheduler = new SchedulerService({
-    whatsappClient: waClient,
-    pairId,
-  })
+  // TODO: Scheduler service temporarily disabled during Supabase migration
+  // const scheduler = new SchedulerService({
+  //   whatsappClient: waClient,
+  //   pairId,
+  // })
 
   // Start services
   await poller.start()
   await notifier.start()
-  await scheduler.start()
+  // await scheduler.start() // Temporarily disabled
 
   logger.info('✅ Worker running successfully!')
 
@@ -159,7 +160,7 @@ async function main() {
     logger.info('Shutting down worker...')
     try {
       notifier.stop()
-      scheduler.stop()
+      // scheduler.stop() // Temporarily disabled
       await waClient.disconnect()
     } catch (e) {
       logger.error({ e }, 'Error during shutdown')
