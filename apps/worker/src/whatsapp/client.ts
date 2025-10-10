@@ -48,7 +48,10 @@ export class WhatsAppClient {
   async connect(): Promise<void> {
     try {
       // Check if auth path exists and is accessible
-      const authPath = join(process.cwd(), this.config.authPath!, this.config.sessionName!);
+      const basePath = this.config.authPath!.startsWith('/') 
+        ? this.config.authPath! 
+        : join(process.cwd(), this.config.authPath!);
+      const authPath = join(basePath, this.config.sessionName!);
       logger.info(`Attempting WhatsApp connection with auth path: ${authPath}`);
       
       let state, saveCreds;
