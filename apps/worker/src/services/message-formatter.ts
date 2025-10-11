@@ -1,10 +1,12 @@
 import { TaskMirror, User, TaskEvent } from '../lib/db';
+import { GeminiService, GeminiMessageContext } from './gemini-service';
 
 export interface NotificationContext {
   event: TaskEvent;
   task: TaskMirror;
   owner: User;
   partner?: User;
+  priority?: string; // optional priority from Notion
 }
 
 export interface TaskListContext {
@@ -15,13 +17,15 @@ export interface TaskListContext {
 
 export class MessageFormatter {
   private templates: Record<string, string>;
+  private geminiService: GeminiService;
 
   constructor(templates?: Record<string, string>) {
+    this.geminiService = new GeminiService();
     // Default templates
     this.templates = {
-      completed: '✅ {owner} completed: {task}\nDue: {due}\n🔗 {link}',
-      created: '📝 {owner} created: {task}\nDue: {due}',
-      status_changed: '📊 {owner} updated: {task}\nStatus: {previousStatus} → {newStatus}',
+      completed: '✅ {owner} completed: {task}\nStatus: Done\nPriority: {priority}\nDue: {due}\n🔗 {link}',
+      created: '📝 {owner} created: {task}\nStatus: {newStatus}\nPriority: {priority}\nDue: {due}',
+      status_changed: '📊 {owner} updated: {task}\nStatus: {previousStatus} → {newStatus}\nPriority: {priority}',
       ...templates,
     };
   }
@@ -29,25 +33,57 @@ export class MessageFormatter {
   /**
    * Format a notification message based on the event type
    */
-  formatMessage(context: NotificationContext): string {
+  async formatMessage(context: NotificationContext): Promise<string> {
     const template = this.templates[context.event.eventType] || this.templates.status_changed;
     
-    return this.interpolate(template, {
-      owner: context.owner.name,
-      task: context.task.title,
-      due: context.task.dueDate ? this.formatDate(context.task.dueDate) : 'No due date',
-      link: context.task.notionUrl,
-      previousStatus: context.event.previousStatus || 'N/A',
-      newStatus: context.event.newStatus,
-      partnerName: context.partner?.name || 'Partner',
+    const basicMessage = this.interpolate(template, {
+      owner: (context.owner as any).name,
+      task: (context.task as any).title,
+      due: (context.task as any).dueDate ? this.formatDate(new Date((context.task as any).dueDate)) : 'No due date',
+      link: (context.task as any).notionUrl,
+      previousStatus: (context.event as any).previousStatus || 'N/A',
+      newStatus: (context.event as any).newStatus,
+      partnerName: (context.partner as any)?.name || 'Partner',
+      priority: context.priority || (context as any)?.task?.priority || 'N/A',
     });
+
+    // Try to enhance with Gemini AI
+    if (this.geminiService.isGeminiEnabled()) {
+      try {
+        const geminiContext: GeminiMessageContext = {
+          originalMessage: basicMessage,
+          eventType: (context.event as any).eventType as 'created' | 'completed' | 'status_changed',
+          task: {
+            title: (context.task as any).title,
+            status: (context.event as any).newStatus,
+            priority: context.priority,
+            dueDate: (context.task as any).dueDate ? this.formatDate(new Date((context.task as any).dueDate)) : undefined,
+          },
+          user: {
+            name: (context.owner as any).name || 'User',
+          },
+          partner: context.partner ? {
+            name: (context.partner as any).name || 'Partner',
+          } : undefined,
+          timeOfDay: GeminiService.getTimeOfDay(),
+        };
+
+        const enhancedMessage = await this.geminiService.enhanceMessage(geminiContext);
+        return enhancedMessage;
+      } catch (error) {
+        // Fall back to basic message if AI enhancement fails
+        return basicMessage;
+      }
+    }
+
+    return basicMessage;
   }
 
   /**
    * Format task completed message with extra celebration
    */
-  formatCompletedMessage(context: NotificationContext & { remainingCount?: number }): string {
-    const baseMessage = this.formatMessage(context);
+  async formatCompletedMessage(context: NotificationContext & { remainingCount?: number }): Promise<string> {
+    const baseMessage = await this.formatMessage(context);
     let celebrationMessage = '';
     
     // Add celebration based on due date
@@ -161,10 +197,12 @@ export class MessageFormatter {
       
       for (const task of tasksToShow) {
         let statusIcon = '📋';
-        if (task.status === 'In Progress') statusIcon = '🔄';
-        else if (task.status === 'Not started') statusIcon = '📝';
+        const statusText = (task as any).status;
+        if (statusText === 'In progress' || statusText === 'In Progress') statusIcon = '🔄';
+        else if (statusText === 'Not started') statusIcon = '📝';
         
-        message += `  ${statusIcon} ${task.title}\n`;
+        const priorityText = (task as any).priority ? ` • Priority: ${(task as any).priority}` : '';
+        message += `  ${statusIcon} ${task.title} • Status: ${statusText}${priorityText}\n`;
         
         // Add due date badge if applicable
         if (task.dueDate) {

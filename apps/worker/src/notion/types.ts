@@ -15,14 +15,14 @@ export interface NotionTaskProperties {
       name: 'Not started' | 'In progress' | 'Done';
     } | null;
   };
-  'Due date': {
+  'Due date'?: {
     type: 'date';
     date: {
       start: string;
       end: string | null;
     } | null;
   };
-  Assignee: {
+  Assignee?: {
     type: 'people';
     people: Array<{
       id: string;
@@ -34,26 +34,26 @@ export interface NotionTaskProperties {
       };
     }>;
   };
-  Priority: {
+  Priority?: {
     type: 'select';
     select: {
       name: 'High' | 'Medium' | 'Low';
     } | null;
   };
-  Description: {
+  Description?: {
     type: 'rich_text';
     rich_text: Array<{
       type: 'text';
       text: { content: string };
     }>;
   };
-  'Effort level': {
+  'Effort level'?: {
     type: 'select';
     select: {
       name: 'Small' | 'Medium' | 'Large';
     } | null;
   };
-  'Task type': {
+  'Task type'?: {
     type: 'multi_select';
     multi_select: Array<{
       name: '🐞 Bug' | '💬 Feature request' | '💅 Polish';
@@ -61,16 +61,14 @@ export interface NotionTaskProperties {
   };
 }
 
-// Type guard to check if a page has our expected properties
+// Type guard to check if a page has our expected properties (more permissive)
 export function isTaskPage(page: PageObjectResponse): page is PageObjectResponse & {
   properties: NotionTaskProperties;
 } {
   const props = page.properties as any;
   return (
     props['Task name']?.type === 'title' &&
-    props.Status?.type === 'status' &&
-    props['Due date']?.type === 'date' &&
-    props.Assignee?.type === 'people'
+    props.Status?.type === 'status'
   );
 }
 

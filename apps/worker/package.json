@@ -21,11 +21,13 @@
     "send:warning": "tsx src/scripts/send-warning.ts",
     "send:summary": "tsx src/scripts/send-summary.ts",
     "inspect:notion": "tsx src/scripts/inspect-notion.ts",
+    "test:gemini": "tsx src/scripts/test-gemini.ts",
     "setup:notion-config": "tsx scripts/create-notion-config.ts",
     "setup:whatsapp-local": "tsx scripts/local-whatsapp-auth.ts",
     "upload:auth-to-railway": "tsx scripts/upload-auth-to-railway.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@hapi/boom": "^10.0.1",
     "@notionhq/client": "^2.2.15",
     "@supabase/supabase-js": "^2.45.4",

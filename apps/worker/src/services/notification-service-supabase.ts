@@ -380,7 +380,26 @@ export class NotificationService {
       let remainingCount: number | undefined;
       if (event.eventType === 'completed' && process.env.COMPLETION_INCLUDE_REMAINING_COUNT !== 'false') {
         const allTasks = await SupabaseWorkerHelpers.getAllTasksForPair(this.pairId);
-        remainingCount = allTasks.filter(t => t.status !== 'Done').length;
+        remainingCount = allTasks.filter(t => {
+          const status = (t as any).status;
+          return status && status.toLowerCase() !== 'done';
+        }).length;
+      }
+
+      // Attempt to fetch priority from Notion for this task
+      let priority: string | undefined = undefined;
+      try {
+        const notionConfig = await SupabaseWorkerHelpers.getNotionConfigByPairId(this.pairId);
+        if (notionConfig && (event.taskMirror as any).notionId) {
+          const notionClient = new (require('../notion/client').NotionClient)({
+            integrationToken: notionConfig.integrationToken,
+            databaseId: notionConfig.databaseId,
+          });
+          const notionTask = await notionClient.fetchTaskById((event.taskMirror as any).notionId);
+          priority = notionTask?.priority || undefined;
+        }
+      } catch (e) {
+        // Non-fatal: continue without priority
       }
 
       // Format message
@@ -390,11 +409,12 @@ export class NotificationService {
         owner: event.taskMirror.owner,
         partner,
         remainingCount,
-      };
+        priority,
+      } as any;
 
       const message = event.eventType === 'completed'
-        ? this.formatter.formatCompletedMessage(context)
-        : this.formatter.formatMessage(context);
+        ? await this.formatter.formatCompletedMessage(context)
+        : await this.formatter.formatMessage(context);
 
     // Check if WhatsApp client is available
     if (!this.whatsappClient) {
@@ -566,7 +586,17 @@ export class NotificationService {
       
       // Fetch all open tasks for the pair
       const allTasks = await SupabaseWorkerHelpers.getAllTasksForPair(this.pairId);
-      const openTasks = allTasks.filter(t => t.status !== 'Done');
+      const openTasks = allTasks.filter(t => {
+        const status = (t as any).status;
+        // Handle various forms of 'Done' status
+        return status && status.toLowerCase() !== 'done';
+      });
+      
+      logger.info({
+        totalTasks: allTasks.length,
+        openTasks: openTasks.length,
+        taskStatuses: allTasks.map(t => ({ title: (t as any).title, status: (t as any).status }))
+      }, 'Task filtering for batch notification');
       
       // Format message as task list
       const context = {

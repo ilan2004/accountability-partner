@@ -94,31 +94,31 @@ export class NotionClient {
    * Parse a Notion page into our TaskMirror format
    */
   private parseTask(page: PageObjectResponse & { properties: NotionTaskProperties }): NotionTask {
-    const props = page.properties;
+    const props = page.properties as Partial<NotionTaskProperties> as any;
 
     // Extract title from 'Task name' property
-    const title = props['Task name'].title
-      .map(text => text.text.content)
+    const title = props['Task name']?.title
+      ?.map((text: any) => text.text.content)
       .join('') || 'Untitled';
 
     // Extract status (map to our expected values)
-    const status = props.Status.status?.name || 'Not started';
+    const status = (props.Status as any)?.status?.name || 'Not started';
 
-    // Extract due date from 'Due date' property
-    const dueDate = props['Due date'].date ? new Date(props['Due date'].date.start) : null;
+    // Extract due date from 'Due date' property (optional)
+    const dueDate = (props['Due date'] as any)?.date ? new Date((props['Due date'] as any).date.start) : null;
 
-    // Extract owner from 'Assignee' property
-    const owner = props.Assignee.people[0];
+    // Extract owner from 'Assignee' property (optional)
+    const owner = (props.Assignee as any)?.people?.[0];
     const ownerNotionId = owner?.id || null;
     const ownerName = owner?.name || null;
 
-    // Extract additional fields
-    const priority = props.Priority.select?.name || undefined;
-    const description = props.Description.rich_text
-      .map(text => text.text.content)
+    // Extract additional fields (optional)
+    const priority = (props.Priority as any)?.select?.name || undefined;
+    const description = (props.Description as any)?.rich_text
+      ?.map((text: any) => text.text.content)
       .join('') || undefined;
-    const effortLevel = props['Effort level'].select?.name || undefined;
-    const taskTypes = props['Task type'].multi_select.map(item => item.name);
+    const effortLevel = (props['Effort level'] as any)?.select?.name || undefined;
+    const taskTypes = (props['Task type'] as any)?.multi_select?.map((item: any) => item.name) || undefined;
 
     // Last edited time
     const lastEditedTime = new Date(page.last_edited_time);
@@ -201,6 +201,21 @@ export class NotionClient {
     } catch (error) {
       logger.error({ error }, 'Failed to fetch users from Notion');
       throw error;
+    }
+  }
+
+  /**
+   * Fetch a single task by Notion page ID
+   */
+  async fetchTaskById(pageId: string): Promise<NotionTask | null> {
+    try {
+      const page = await (this.client as any).pages.retrieve({ page_id: pageId });
+      if (!('properties' in page)) return null;
+      if (!isTaskPage(page as any)) return null;
+      return this.parseTask(page as any);
+    } catch (error) {
+      logger.error({ error, pageId }, 'Failed to fetch Notion task by ID');
+      return null;
     }
   }
 }
