@@ -25,6 +25,8 @@ export class SchedulerService {
   private summaryTask: cron.ScheduledTask | null = null;
   private warningScheduler: WarningScheduler | null = null;
   private summaryScheduler: DailySummaryScheduler | null = null;
+  private waOnDemand: boolean;
+  private waIdleTimeoutMs: number;
 
   constructor(config: SchedulerServiceConfig) {
     this.whatsappClient = config.whatsappClient;
@@ -32,6 +34,8 @@ export class SchedulerService {
     this.timezone = config.timezone || 'Asia/Kolkata';
     this.warningTime = config.warningTime || '20:00';
     this.summaryTime = config.summaryTime || '23:55';
+    this.waOnDemand = process.env.WA_ON_DEMAND === 'true'; // default false
+    this.waIdleTimeoutMs = Number(process.env.WA_IDLE_TIMEOUT_MS || 60000); // 1 minute
 
     // Initialize schedulers (only if WhatsApp client is available)
     if (this.whatsappClient) {
@@ -70,7 +74,17 @@ export class SchedulerService {
     this.warningTask = cron.schedule(warningCron, async () => {
       logger.info('Running scheduled warning');
       try {
+        // Handle on-demand connection
+        if (this.waOnDemand) {
+          await this.ensureWhatsAppConnected();
+        }
+        
         await this.warningScheduler.sendWarning();
+        
+        // Schedule disconnect if on-demand mode
+        if (this.waOnDemand) {
+          await this.scheduleDisconnect();
+        }
       } catch (error) {
         logger.error({ error }, 'Failed to send warning');
       }
@@ -86,7 +100,17 @@ export class SchedulerService {
     this.summaryTask = cron.schedule(summaryCron, async () => {
       logger.info('Running scheduled daily summary');
       try {
+        // Handle on-demand connection
+        if (this.waOnDemand) {
+          await this.ensureWhatsAppConnected();
+        }
+        
         await this.summaryScheduler.sendDailySummary();
+        
+        // Schedule disconnect if on-demand mode
+        if (this.waOnDemand) {
+          await this.scheduleDisconnect();
+        }
       } catch (error) {
         logger.error({ error }, 'Failed to send daily summary');
       }
@@ -151,7 +175,18 @@ export class SchedulerService {
       throw new Error('Warning scheduler not available - WhatsApp client not initialized');
     }
     logger.info('Manually triggering warning');
+    
+    // Handle on-demand connection
+    if (this.waOnDemand) {
+      await this.ensureWhatsAppConnected();
+    }
+    
     await this.warningScheduler.sendWarning();
+    
+    // Schedule disconnect if on-demand mode
+    if (this.waOnDemand) {
+      await this.scheduleDisconnect();
+    }
   }
 
   /**
@@ -162,7 +197,18 @@ export class SchedulerService {
       throw new Error('Summary scheduler not available - WhatsApp client not initialized');
     }
     logger.info('Manually triggering daily summary');
+    
+    // Handle on-demand connection
+    if (this.waOnDemand) {
+      await this.ensureWhatsAppConnected();
+    }
+    
     await this.summaryScheduler.sendDailySummary();
+    
+    // Schedule disconnect if on-demand mode
+    if (this.waOnDemand) {
+      await this.scheduleDisconnect();
+    }
   }
 
   /**
@@ -176,5 +222,38 @@ export class SchedulerService {
       warningScheduled: this.warningTask !== null,
       summaryScheduled: this.summaryTask !== null,
     };
+  }
+  
+  /**
+   * Ensure WhatsApp is connected (for on-demand mode)
+   */
+  private async ensureWhatsAppConnected(): Promise<void> {
+    if (!this.whatsappClient) return;
+    
+    if (!this.whatsappClient.isConnected()) {
+      logger.info('WhatsApp not connected, connecting on-demand for scheduled send...');
+      await this.whatsappClient.connect();
+      logger.info('WhatsApp connected on-demand successfully');
+    } else {
+      logger.debug('WhatsApp already connected');
+    }
+  }
+  
+  /**
+   * Schedule disconnect after idle timeout
+   */
+  private async scheduleDisconnect(): Promise<void> {
+    if (!this.waOnDemand || !this.whatsappClient) return;
+    
+    // Wait for idle timeout then disconnect
+    setTimeout(async () => {
+      if (this.whatsappClient && this.whatsappClient.isConnected()) {
+        logger.info('Scheduled message sent, disconnecting WhatsApp after idle timeout...');
+        await this.whatsappClient.disconnect();
+        logger.info('WhatsApp disconnected after scheduled send');
+      }
+    }, this.waIdleTimeoutMs);
+    
+    logger.debug({ timeout: this.waIdleTimeoutMs }, 'Scheduled WhatsApp disconnect after scheduled send');
   }
 }

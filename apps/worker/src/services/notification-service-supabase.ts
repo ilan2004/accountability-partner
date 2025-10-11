@@ -29,6 +29,9 @@ export class NotificationService {
   private maxRetryDelay: number;
   private taskListOnCreate: boolean;
   private taskListAggregationWindow: number;
+  private waOnDemand: boolean;
+  private idleDisconnectTimer: NodeJS.Timeout | null = null;
+  private waIdleTimeoutMs: number;
 
   constructor(config: NotificationServiceConfig) {
     this.whatsappClient = config.whatsappClient;
@@ -44,6 +47,8 @@ export class NotificationService {
     this.maxRetryDelay = 30000; // cap at 30s
     this.taskListOnCreate = process.env.TASK_LIST_ON_CREATE !== 'false'; // default true
     this.taskListAggregationWindow = Number(process.env.TASK_LIST_AGGREGATION_WINDOW_MS || 8000);
+    this.waOnDemand = process.env.WA_ON_DEMAND === 'true'; // default false
+    this.waIdleTimeoutMs = Number(process.env.WA_IDLE_TIMEOUT_MS || 60000); // 1 minute
   }
 
   /**
@@ -74,6 +79,10 @@ export class NotificationService {
   stop(): void {
     logger.info('Stopping notification service');
     this.isRunning = false;
+    if (this.idleDisconnectTimer) {
+      clearTimeout(this.idleDisconnectTimer);
+      this.idleDisconnectTimer = null;
+    }
   }
 
   /**
@@ -387,7 +396,7 @@ export class NotificationService {
         ? this.formatter.formatCompletedMessage(context)
         : this.formatter.formatMessage(context);
 
-    // Check if WhatsApp client is available and connected
+    // Check if WhatsApp client is available
     if (!this.whatsappClient) {
       logger.warn({ notificationId }, 'WhatsApp client not available, marking notification as failed');
       
@@ -402,6 +411,11 @@ export class NotificationService {
 
       if (error) logger.error({ error }, 'Failed to mark notification as failed');
       throw new Error('WhatsApp client not available');
+    }
+    
+    // Handle on-demand connection
+    if (this.waOnDemand) {
+      await this.ensureWhatsAppConnected();
     }
 
     // Get detailed connection info for debugging
@@ -463,6 +477,11 @@ export class NotificationService {
           task: event.taskMirror.title,
           groupJid: settings.whatsappGroupJid
         }, '✅ Notification sent successfully');
+        
+        // Schedule disconnect if on-demand mode
+        if (this.waOnDemand) {
+          this.scheduleIdleDisconnect();
+        }
 
         return;
       } catch (error) {
@@ -568,6 +587,11 @@ export class NotificationService {
         return;
       }
       
+      // Handle on-demand connection
+      if (this.waOnDemand) {
+        await this.ensureWhatsAppConnected();
+      }
+      
       if (!this.whatsappClient.isConnected()) {
         logger.warn('WhatsApp client not connected for batch processing');
         // Don't mark as permanently failed - this is transient
@@ -618,6 +642,11 @@ export class NotificationService {
           eventCount: createdEvents.length,
           taskCount: openTasks.length
         }, '✅ Task list sent for created events batch');
+        
+        // Schedule disconnect if on-demand mode
+        if (this.waOnDemand) {
+          this.scheduleIdleDisconnect();
+        }
       }
       
     } catch (error) {
@@ -669,9 +698,53 @@ export class NotificationService {
     await supabase
       .from('TaskEvent')
       .update({ processedAt: new Date().toISOString() })
+      })
       .eq('id', eventId);
   }
-
+  
+  /**
+   * Ensure WhatsApp is connected (for on-demand mode)
+   */
+  private async ensureWhatsAppConnected(): Promise<void> {
+    if (!this.whatsappClient) return;
+    
+    // Cancel any pending disconnect
+    if (this.idleDisconnectTimer) {
+      clearTimeout(this.idleDisconnectTimer);
+      this.idleDisconnectTimer = null;
+    }
+    
+    if (!this.whatsappClient.isConnected()) {
+      logger.info('WhatsApp not connected, connecting on-demand...');
+      await this.whatsappClient.connect();
+      logger.info('WhatsApp connected on-demand successfully');
+    } else {
+      logger.debug('WhatsApp already connected');
+    }
+  }
+  
+  /**
+   * Schedule idle disconnect (for on-demand mode)
+   */
+  private scheduleIdleDisconnect(): void {
+    if (!this.waOnDemand || !this.whatsappClient) return;
+    
+    // Cancel any existing timer
+    if (this.idleDisconnectTimer) {
+      clearTimeout(this.idleDisconnectTimer);
+    }
+    
+    // Schedule new disconnect
+    this.idleDisconnectTimer = setTimeout(async () => {
+      if (this.whatsappClient && this.whatsappClient.isConnected()) {
+        logger.info('WhatsApp idle timeout reached, disconnecting...');
+        await this.whatsappClient.disconnect();
+        logger.info('WhatsApp disconnected due to idle timeout');
+      }
+    }, this.waIdleTimeoutMs);
+    
+    logger.debug({ timeout: this.waIdleTimeoutMs }, 'Scheduled WhatsApp idle disconnect');
+  }
   /**
    * Load custom templates from settings
    */

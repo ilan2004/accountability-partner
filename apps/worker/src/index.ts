@@ -176,6 +176,7 @@ async function main() {
   // Initialize WhatsApp client (optional)
   let waClient: WhatsAppClient | null = null
   const waEnabled = process.env.WA_ENABLED !== 'false'
+  const waOnDemand = process.env.WA_ON_DEMAND === 'true'
   
   if (waEnabled) {
     try {
@@ -185,10 +186,16 @@ async function main() {
         authPath: process.env.WA_AUTH_PATH || './auth',
         printQR: process.env.WA_PRINT_QR !== 'false',
       })
-      await waClient.connect()
-      logger.info('✅ WhatsApp client initialized successfully')
       
-      // Clean up auth environment variable after successful connection
+      // Only connect at startup if not in on-demand mode
+      if (!waOnDemand) {
+        await waClient.connect()
+        logger.info('✅ WhatsApp client initialized and connected successfully')
+      } else {
+        logger.info('✅ WhatsApp client initialized in on-demand mode (not connected)')
+      }
+      
+      // Clean up auth environment variable after successful initialization
       cleanupAuthEnvironment()
     } catch (waError) {
       logger.warn('⚠️ WhatsApp client failed to initialize:', waError)
@@ -233,7 +240,9 @@ async function main() {
     try {
       notifier.stop()
       scheduler.stop()
-      await waClient.disconnect()
+      if (waClient && waClient.isConnected()) {
+        await waClient.disconnect()
+      }
     } catch (e) {
       logger.error({ e }, 'Error during shutdown')
     } finally {

@@ -21,6 +21,9 @@ export class WhatsAppClient {
   private maxReconnectAttempts = 5;
   private reconnectBaseDelayMs = 5000; // Start with 5 seconds
   private reconnectMaxDelayMs = 60000; // Cap at 60 seconds
+  private isManuallyDisconnected = false;
+  private lastActivityTime: number = Date.now();
+  private idleTimeoutMs = 60000; // 1 minute idle timeout
 
   constructor(config: WhatsAppConfig = {}) {
     this.config = {
@@ -46,6 +49,14 @@ export class WhatsAppClient {
    * Initialize and connect to WhatsApp
    */
   async connect(): Promise<void> {
+    if (this.isConnected()) {
+      logger.debug('Already connected to WhatsApp');
+      return;
+    }
+    
+    this.isManuallyDisconnected = false;
+    this.lastActivityTime = Date.now();
+    
     try {
       // Check if auth path exists and is accessible
       const basePath = this.config.authPath!.startsWith('/') 
@@ -213,7 +224,7 @@ export class WhatsAppClient {
         date: new Date(),
       };
 
-      if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts && !this.isManuallyDisconnected) {
         this.reconnectAttempts++;
         // exponential backoff with jitter and cap
         const base = this.reconnectBaseDelayMs * Math.pow(2, this.reconnectAttempts - 1);
@@ -225,6 +236,8 @@ export class WhatsAppClient {
         setTimeout(() => this.connect(), jitter);
       } else if (reason === DisconnectReason.loggedOut) {
         logger.error('Logged out from WhatsApp. Please re-authenticate.');
+      } else if (this.isManuallyDisconnected) {
+        logger.info('Disconnected manually, not reconnecting');
       } else {
         logger.error('Max reconnection attempts reached. Please restart the bot.');
       }
@@ -312,6 +325,7 @@ export class WhatsAppClient {
       });
 
       logger.info(`✅ Message sent successfully to ${jid}`);
+      this.lastActivityTime = Date.now();
     } catch (error) {
       logger.error('❌ Failed to send message - detailed error:', {
         error,
@@ -374,6 +388,7 @@ export class WhatsAppClient {
    * Disconnect from WhatsApp
    */
   async disconnect(): Promise<void> {
+    this.isManuallyDisconnected = true;
     if (this.socket) {
       this.socket.ev.removeAllListeners();
       this.socket.ws.close();
@@ -414,5 +429,33 @@ export class WhatsAppClient {
         authPath: this.config.authPath
       }
     };
+  }
+  
+  /**
+   * Get time since last activity
+   */
+  getIdleTime(): number {
+    return Date.now() - this.lastActivityTime;
+  }
+  
+  /**
+   * Check if connection should timeout due to inactivity
+   */
+  isIdleTimeout(): boolean {
+    return this.getIdleTime() > this.idleTimeoutMs;
+  }
+  
+  /**
+   * Set idle timeout duration
+   */
+  setIdleTimeout(ms: number): void {
+    this.idleTimeoutMs = ms;
+  }
+  
+  /**
+   * Reset activity timer
+   */
+  resetActivityTimer(): void {
+    this.lastActivityTime = Date.now();
   }
 }
