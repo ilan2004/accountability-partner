@@ -698,7 +698,6 @@ export class NotificationService {
     await supabase
       .from('TaskEvent')
       .update({ processedAt: new Date().toISOString() })
-      })
       .eq('id', eventId);
   }
   
