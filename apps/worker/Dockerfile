@@ -8,13 +8,13 @@ RUN apk add --no-cache unzip
 WORKDIR /app
 
 # Copy worker package files
-COPY apps/worker/package*.json ./
+COPY package*.json ./
 
 # Install all dependencies (including devDependencies like tsx)
 RUN npm install
 
 # Copy worker source code
-COPY apps/worker ./
+COPY . ./
 
 # Create auth directory for WhatsApp (mapped to volume)
 RUN mkdir -p /app/auth
