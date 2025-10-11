@@ -216,6 +216,7 @@ export interface Database {
           retryCount: number;
           lastError: string | null;
           messageId: string | null;
+          nextAttemptAt: string | null;
           createdAt: string;
           updatedAt: string;
         };
@@ -228,6 +229,7 @@ export interface Database {
           retryCount?: number;
           lastError?: string | null;
           messageId?: string | null;
+          nextAttemptAt?: string | null;
           createdAt?: string;
           updatedAt?: string;
         };
@@ -240,6 +242,7 @@ export interface Database {
           retryCount?: number;
           lastError?: string | null;
           messageId?: string | null;
+          nextAttemptAt?: string | null;
           createdAt?: string;
           updatedAt?: string;
         };
@@ -421,6 +424,33 @@ export class SupabaseWorkerHelpers {
         )
       `)
       .is('processedAt', null)
+      .order('createdAt', { ascending: true })
+      .limit(limit);
+    
+    if (error) {
+      throw error;
+    }
+    
+    return data || [];
+  }
+
+  static async getEligibleNotifications(limit = 10) {
+    const now = new Date().toISOString();
+    
+    const { data, error } = await supabase
+      .from('Notification')
+      .select(`
+        *,
+        taskEvent:TaskEvent(
+          *,
+          taskMirror:TaskMirror(
+            *,
+            owner:User(*)
+          )
+        )
+      `)
+      .in('status', ['pending', 'processing'])
+      .or(`nextAttemptAt.is.null,nextAttemptAt.lte.${now}`)
       .order('createdAt', { ascending: true })
       .limit(limit);
     

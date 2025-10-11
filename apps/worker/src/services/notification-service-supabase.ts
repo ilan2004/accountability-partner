@@ -23,6 +23,8 @@ export class NotificationService {
   private maxRetries: number;
   private retryDelay: number;
   private maxRetryDelay: number;
+  private taskListOnCreate: boolean;
+  private taskListAggregationWindow: number;
 
   constructor(config: NotificationServiceConfig) {
     this.whatsappClient = config.whatsappClient;
@@ -32,6 +34,8 @@ export class NotificationService {
     this.maxRetries = config.maxRetries || 3;
     this.retryDelay = config.retryDelay || 1000; // base delay 1s
     this.maxRetryDelay = 30000; // cap at 30s
+    this.taskListOnCreate = process.env.TASK_LIST_ON_CREATE !== 'false'; // default true
+    this.taskListAggregationWindow = Number(process.env.TASK_LIST_AGGREGATION_WINDOW_MS || 8000);
   }
 
   /**
@@ -86,7 +90,7 @@ export class NotificationService {
    */
   async processUnsentEvents(): Promise<void> {
     // Find ALL unprocessed events (simplified approach)
-    const events = await SupabaseWorkerHelpers.getUnprocessedTaskEvents(10);
+    const events = await SupabaseWorkerHelpers.getUnprocessedTaskEvents(50); // Increased to handle aggregation
 
     if (events.length === 0) {
       return;
@@ -94,6 +98,53 @@ export class NotificationService {
 
     logger.info(`Processing ${events.length} events`);
 
+    // Check if we should aggregate created events
+    if (this.taskListOnCreate) {
+      const createdEvents = events.filter(e => e.eventType === 'created');
+      const otherEvents = events.filter(e => e.eventType !== 'created');
+      
+      if (createdEvents.length > 0) {
+        // Check if all created events are within aggregation window
+        const oldestCreated = new Date(createdEvents[0].createdAt).getTime();
+        const newestCreated = new Date(createdEvents[createdEvents.length - 1].createdAt).getTime();
+        
+        if (newestCreated - oldestCreated <= this.taskListAggregationWindow) {
+          // Process as a batch
+          await this.processCreatedEventBatch(createdEvents);
+        } else {
+          // Process old ones individually, batch recent ones
+          const cutoffTime = newestCreated - this.taskListAggregationWindow;
+          const oldCreated = createdEvents.filter(e => new Date(e.createdAt).getTime() < cutoffTime);
+          const recentCreated = createdEvents.filter(e => new Date(e.createdAt).getTime() >= cutoffTime);
+          
+          // Process old ones individually
+          for (const event of oldCreated) {
+            try {
+              await this.processEvent(event);
+            } catch (error) {
+              logger.error({ error, eventId: event.id }, 'Failed to process event');
+            }
+          }
+          
+          // Batch recent ones
+          if (recentCreated.length > 0) {
+            await this.processCreatedEventBatch(recentCreated);
+          }
+        }
+        
+        // Process non-created events normally
+        for (const event of otherEvents) {
+          try {
+            await this.processEvent(event);
+          } catch (error) {
+            logger.error({ error, eventId: event.id }, 'Failed to process event');
+          }
+        }
+        return;
+      }
+    }
+
+    // Default processing for all events
     for (const event of events) {
       try {
         await this.processEvent(event);
@@ -107,12 +158,23 @@ export class NotificationService {
    * Process a single event
    */
   private async processEvent(event: any): Promise<void> {
-    logger.debug({ eventId: event.id }, 'Processing event');
+    logger.debug({ eventId: event.id, eventType: event.eventType }, 'Processing event');
 
-    // Check if already has a sent notification
-    const existingNotification = await SupabaseWorkerHelpers.getSentNotificationByTaskEventId(event.id);
+    // Check if already has a sent notification or is permanently failed
+    const { data: existingNotifications, error: checkError } = await supabase
+      .from('Notification')
+      .select('*')
+      .eq('taskEventId', event.id)
+      .in('status', ['sent', 'permanently_failed']);
 
-    if (existingNotification) {
+    if (checkError) throw checkError;
+
+    if (existingNotifications && existingNotifications.length > 0) {
+      const notification = existingNotifications[0];
+      if (notification.status === 'permanently_failed') {
+        logger.debug({ eventId: event.id, notificationId: notification.id }, 'Skipping permanently failed notification');
+      }
+      
       // Mark event as processed
       const { error } = await supabase
         .from('TaskEvent')
@@ -133,6 +195,7 @@ export class NotificationService {
           taskEventId: event.id,
           channel: 'whatsapp',
           status: 'pending',
+          nextAttemptAt: new Date().toISOString(), // Attempt immediately
         })
         .select()
         .single();
@@ -153,19 +216,71 @@ export class NotificationService {
 
       if (error) throw error;
     } catch (error) {
-      logger.error({ error, notificationId: notification.id }, 'Failed to send notification');
+      const { isPermanent, reason } = this.classifyError(error);
       
-      // Update retry count
-      const { error: updateError } = await supabase
-        .from('Notification')
-        .update({
-          retryCount: notification.retryCount + 1,
-          lastError: error instanceof Error ? error.message : 'Unknown error',
-        })
-        .eq('id', notification.id);
+      logger.error({ 
+        error, 
+        notificationId: notification.id,
+        eventId: event.id,
+        isPermanent,
+        reason 
+      }, isPermanent ? 'Permanent failure for notification' : 'Transient failure for notification');
+      
+      if (isPermanent) {
+        // Mark as permanently failed
+        const { error: updateError } = await supabase
+          .from('Notification')
+          .update({
+            status: 'permanently_failed',
+            lastError: reason,
+          })
+          .eq('id', notification.id);
 
-      if (updateError) {
-        logger.error({ error: updateError }, 'Failed to update notification retry count');
+        if (updateError) {
+          logger.error({ error: updateError }, 'Failed to mark notification as permanently failed');
+        }
+        
+        // Mark event as processed since we won't retry
+        const { error: eventError } = await supabase
+          .from('TaskEvent')
+          .update({ processedAt: new Date().toISOString() })
+          .eq('id', event.id);
+          
+        if (eventError) {
+          logger.error({ error: eventError }, 'Failed to mark event as processed after permanent failure');
+        }
+      } else {
+        // Update retry count and set next attempt time
+        const nextRetryCount = notification.retryCount + 1;
+        const nextAttemptAt = nextRetryCount >= this.maxRetries 
+          ? null // No more retries
+          : this.calculateNextAttemptTime(nextRetryCount);
+        
+        const { error: updateError } = await supabase
+          .from('Notification')
+          .update({
+            retryCount: nextRetryCount,
+            lastError: reason,
+            status: nextRetryCount >= this.maxRetries ? 'permanently_failed' : 'pending',
+            nextAttemptAt: nextAttemptAt?.toISOString() || null,
+          })
+          .eq('id', notification.id);
+
+        if (updateError) {
+          logger.error({ error: updateError }, 'Failed to update notification after transient failure');
+        }
+        
+        // If max retries reached, mark event as processed
+        if (nextRetryCount >= this.maxRetries) {
+          const { error: eventError } = await supabase
+            .from('TaskEvent')
+            .update({ processedAt: new Date().toISOString() })
+            .eq('id', event.id);
+            
+          if (eventError) {
+            logger.error({ error: eventError }, 'Failed to mark event as processed after max retries');
+          }
+        }
       }
     }
   }
@@ -174,6 +289,16 @@ export class NotificationService {
    * Send a notification with retries
    */
   private async sendNotification(notificationId: string, event: any): Promise<void> {
+    // Set status to processing
+    const { error: processingError } = await supabase
+      .from('Notification')
+      .update({ status: 'processing' })
+      .eq('id', notificationId);
+      
+    if (processingError) {
+      logger.error({ error: processingError }, 'Failed to set notification to processing');
+    }
+    
     const { data: notification, error: fetchError } = await supabase
       .from('Notification')
       .select('*')
@@ -182,7 +307,10 @@ export class NotificationService {
 
     if (fetchError) throw fetchError;
 
-    if (!notification || notification.status === 'sent') {
+    if (!notification || notification.status === 'sent' || notification.status === 'permanently_failed') {
+      if (notification?.status === 'permanently_failed') {
+        logger.debug({ notificationId }, 'Skipping permanently failed notification');
+      }
       return;
     }
 
@@ -206,20 +334,28 @@ export class NotificationService {
 
     const settings = pair.settings[0];
 
-    // Get partner
-    const partner = event.taskMirror.owner.id === pair.user1.id ? pair.user2 : pair.user1;
+      // Get partner
+      const partner = event.taskMirror.owner.id === pair.user1.id ? pair.user2 : pair.user1;
 
-    // Format message
-    const context = {
-      event,
-      task: event.taskMirror,
-      owner: event.taskMirror.owner,
-      partner,
-    };
+      // Get remaining count if this is a completion
+      let remainingCount: number | undefined;
+      if (event.eventType === 'completed' && process.env.COMPLETION_INCLUDE_REMAINING_COUNT !== 'false') {
+        const allTasks = await SupabaseWorkerHelpers.getAllTasksForPair(this.pairId);
+        remainingCount = allTasks.filter(t => t.status !== 'Done').length;
+      }
 
-    const message = event.eventType === 'completed'
-      ? this.formatter.formatCompletedMessage(context)
-      : this.formatter.formatMessage(context);
+      // Format message
+      const context = {
+        event,
+        task: event.taskMirror,
+        owner: event.taskMirror.owner,
+        partner,
+        remainingCount,
+      };
+
+      const message = event.eventType === 'completed'
+        ? this.formatter.formatCompletedMessage(context)
+        : this.formatter.formatMessage(context);
 
     // Check if WhatsApp client is available and connected
     if (!this.whatsappClient) {
@@ -323,6 +459,187 @@ export class NotificationService {
     }
 
     throw lastError || new Error('Failed to send notification');
+  }
+
+  /**
+   * Classify error as permanent or transient
+   */
+  private classifyError(error: any): { isPermanent: boolean; reason: string } {
+    const errorMessage = error?.message || String(error);
+    const errorCode = error?.code;
+    
+    // Permanent errors
+    if (errorMessage.includes('No WhatsApp group configured')) {
+      return { isPermanent: true, reason: 'No WhatsApp group configured' };
+    }
+    
+    if (errorMessage.includes('WhatsApp client not available')) {
+      return { isPermanent: true, reason: 'WhatsApp client not available' };
+    }
+    
+    if (errorMessage.includes('invalid JID') || errorMessage.includes('invalid-jid')) {
+      return { isPermanent: true, reason: 'Invalid WhatsApp JID' };
+    }
+    
+    if (errorCode === '23505') { // PostgreSQL unique constraint violation
+      return { isPermanent: true, reason: 'Duplicate notification' };
+    }
+    
+    // Everything else is transient
+    return { isPermanent: false, reason: errorMessage };
+  }
+
+  /**
+   * Calculate next attempt time with exponential backoff and jitter
+   */
+  private calculateNextAttemptTime(retryCount: number): Date {
+    const baseDelay = this.retryDelay * Math.pow(2, retryCount);
+    const cappedDelay = Math.min(baseDelay, this.maxRetryDelay);
+    const jitter = Math.floor(cappedDelay * (0.8 + Math.random() * 0.4)); // ±20% jitter
+    return new Date(Date.now() + jitter);
+  }
+
+  /**
+   * Process a batch of created events by sending a task list
+   */
+  private async processCreatedEventBatch(createdEvents: any[]): Promise<void> {
+    logger.info(`Processing ${createdEvents.length} created events as a batch`);
+    
+    try {
+      // Get pair and settings
+      const pair = await SupabaseWorkerHelpers.getPairWithUsers(this.pairId);
+      
+      if (!pair || !pair.settings || pair.settings.length === 0 || !pair.settings[0].whatsappGroupJid) {
+        throw new Error('No WhatsApp group configured');
+      }
+      
+      const settings = pair.settings[0];
+      
+      // Fetch all open tasks for the pair
+      const allTasks = await SupabaseWorkerHelpers.getAllTasksForPair(this.pairId);
+      const openTasks = allTasks.filter(t => t.status !== 'Done');
+      
+      // Format message as task list
+      const context = {
+        tasks: openTasks,
+        totalCount: openTasks.length,
+        maxTasksPerOwner: 10
+      };
+      
+      const message = this.formatter.formatTaskListByOwner(context);
+      
+      // Check if WhatsApp client is available
+      if (!this.whatsappClient) {
+        logger.warn('WhatsApp client not available for batch processing');
+        // Mark all events as permanently failed due to missing client
+        for (const event of createdEvents) {
+          await this.markEventPermanentlyFailed(event.id, 'WhatsApp client not available');
+        }
+        return;
+      }
+      
+      if (!this.whatsappClient.isConnected()) {
+        logger.warn('WhatsApp client not connected for batch processing');
+        // Don't mark as permanently failed - this is transient
+        return;
+      }
+      
+      // Send the task list message
+      logger.info({
+        groupJid: settings.whatsappGroupJid,
+        openTaskCount: openTasks.length,
+        createdEventCount: createdEvents.length
+      }, 'Sending task list for created events batch');
+      
+      await this.whatsappClient.sendMessage({
+        to: settings.whatsappGroupJid,
+        text: message,
+      });
+      
+      // Mark all created events as processed
+      // Create a single notification for the most recent event for audit trail
+      const mostRecentEvent = createdEvents[createdEvents.length - 1];
+      
+      const { error: notifError } = await supabase
+        .from('Notification')
+        .insert({
+          taskEventId: mostRecentEvent.id,
+          channel: 'whatsapp',
+          status: 'sent',
+          sentAt: new Date().toISOString(),
+          messageId: 'batch-' + new Date().getTime(),
+        });
+      
+      if (notifError) {
+        logger.error({ error: notifError }, 'Failed to create notification record for batch');
+      }
+      
+      // Mark all events as processed
+      const eventIds = createdEvents.map(e => e.id);
+      const { error: updateError } = await supabase
+        .from('TaskEvent')
+        .update({ processedAt: new Date().toISOString() })
+        .in('id', eventIds);
+      
+      if (updateError) {
+        logger.error({ error: updateError }, 'Failed to mark batch events as processed');
+      } else {
+        logger.info({
+          eventCount: createdEvents.length,
+          taskCount: openTasks.length
+        }, '✅ Task list sent for created events batch');
+      }
+      
+    } catch (error) {
+      logger.error({ error }, 'Failed to process created event batch');
+      // Process individually as fallback
+      for (const event of createdEvents) {
+        try {
+          await this.processEvent(event);
+        } catch (err) {
+          logger.error({ error: err, eventId: event.id }, 'Failed to process event individually');
+        }
+      }
+    }
+  }
+  
+  /**
+   * Mark an event as permanently failed
+   */
+  private async markEventPermanentlyFailed(eventId: string, reason: string): Promise<void> {
+    // Check if notification already exists
+    const { data: existingNotif } = await supabase
+      .from('Notification')
+      .select('id')
+      .eq('taskEventId', eventId)
+      .single();
+    
+    if (existingNotif) {
+      // Update existing
+      await supabase
+        .from('Notification')
+        .update({
+          status: 'permanently_failed',
+          lastError: reason,
+        })
+        .eq('id', existingNotif.id);
+    } else {
+      // Create new
+      await supabase
+        .from('Notification')
+        .insert({
+          taskEventId: eventId,
+          channel: 'whatsapp',
+          status: 'permanently_failed',
+          lastError: reason,
+        });
+    }
+    
+    // Mark event as processed
+    await supabase
+      .from('TaskEvent')
+      .update({ processedAt: new Date().toISOString() })
+      .eq('id', eventId);
   }
 
   /**

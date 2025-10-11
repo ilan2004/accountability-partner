@@ -7,6 +7,12 @@ export interface NotificationContext {
   partner?: User;
 }
 
+export interface TaskListContext {
+  tasks: Array<TaskMirror & { owner: User }>;
+  totalCount: number;
+  maxTasksPerOwner?: number;
+}
+
 export class MessageFormatter {
   private templates: Record<string, string>;
 
@@ -40,8 +46,9 @@ export class MessageFormatter {
   /**
    * Format task completed message with extra celebration
    */
-  formatCompletedMessage(context: NotificationContext): string {
+  formatCompletedMessage(context: NotificationContext & { remainingCount?: number }): string {
     const baseMessage = this.formatMessage(context);
+    let celebrationMessage = '';
     
     // Add celebration based on due date
     if (context.task.dueDate) {
@@ -50,13 +57,23 @@ export class MessageFormatter {
       );
       
       if (daysUntilDue >= 0) {
-        return `${baseMessage}\n\n🎉 Completed ${daysUntilDue} days before deadline!`;
+        celebrationMessage = `\n\n🎉 Completed ${daysUntilDue} days before deadline!`;
       } else {
-        return `${baseMessage}\n\n⚡ Better late than never!`;
+        celebrationMessage = `\n\n⚡ Better late than never!`;
       }
     }
     
-    return baseMessage;
+    // Add remaining count if provided and enabled
+    let remainingMessage = '';
+    if (context.remainingCount !== undefined && process.env.COMPLETION_INCLUDE_REMAINING_COUNT !== 'false') {
+      if (context.remainingCount === 0) {
+        remainingMessage = `\n\n🏆 All tasks completed! Amazing work!`;
+      } else {
+        remainingMessage = `\n\n📈 Remaining open tasks: ${context.remainingCount}`;
+      }
+    }
+    
+    return baseMessage + celebrationMessage + remainingMessage;
   }
 
   /**
@@ -98,4 +115,91 @@ export class MessageFormatter {
   setTemplates(templates: Record<string, string>): void {
     this.templates = { ...this.templates, ...templates };
   }
-}
+
+  /**
+   * Format a task list grouped by owner
+   */
+  formatTaskListByOwner(context: TaskListContext): string {
+    const { tasks, totalCount, maxTasksPerOwner = 10 } = context;
+    
+    if (tasks.length === 0) {
+      return '[Bot] 📋 Current Tasks\n\nNo open tasks at the moment. Great work! 🎉';
+    }
+
+    let message = '[Bot] 📋 Current Tasks\n';
+    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Group tasks by owner
+    const tasksByOwner = new Map<string, typeof tasks>();
+    for (const task of tasks) {
+      const ownerId = task.owner.id;
+      if (!tasksByOwner.has(ownerId)) {
+        tasksByOwner.set(ownerId, []);
+      }
+      tasksByOwner.get(ownerId)!.push(task);
+    }
+
+    // Format each owner's tasks
+    for (const [ownerId, ownerTasks] of tasksByOwner) {
+      const owner = ownerTasks[0].owner;
+      message += `\n👤 ${owner.name || 'Unknown'}:\n`;
+      
+      // Sort tasks by due date (earliest first, no due date last)
+      const sortedTasks = ownerTasks.sort((a, b) => {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      });
+
+      // Show first N tasks
+      const tasksToShow = sortedTasks.slice(0, maxTasksPerOwner);
+      
+      for (const task of tasksToShow) {
+        let statusIcon = '📋';
+        if (task.status === 'In Progress') statusIcon = '🔄';
+        else if (task.status === 'Not started') statusIcon = '📝';
+        
+        message += `  ${statusIcon} ${task.title}\n`;
+        
+        // Add due date badge if applicable
+        if (task.dueDate) {
+          const dueDate = new Date(task.dueDate);
+          const daysUntilDue = Math.floor(
+            (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          
+          let dueBadge = '';
+          if (dueDate < now) {
+            dueBadge = `⚠️ Overdue by ${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''}`;
+          } else if (dueDate.getTime() === today.getTime()) {
+            dueBadge = '🔴 Due Today';
+          } else if (dueDate.getTime() === tomorrow.getTime()) {
+            dueBadge = '🟡 Due Tomorrow';
+          } else if (daysUntilDue <= 7) {
+            dueBadge = `📅 Due ${this.formatDate(dueDate)}`;
+          }
+          
+          if (dueBadge) {
+            message += `     ${dueBadge}\n`;
+          }
+        }
+        
+        message += `     🔗 ${task.notionUrl}\n`;
+      }
+      
+      // Add summary if more tasks exist
+      if (ownerTasks.length > maxTasksPerOwner) {
+        message += `  ... and ${ownerTasks.length - maxTasksPerOwner} more task${ownerTasks.length - maxTasksPerOwner > 1 ? 's' : ''}\n`;
+      }
+    }
+    
+    // Add total summary
+    message += `\n📊 Total: ${totalCount} open task${totalCount !== 1 ? 's' : ''}`;
+    
+    return message;
+  }
