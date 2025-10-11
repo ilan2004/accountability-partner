@@ -18,6 +18,10 @@ export class NotionPollerService {
   private notionClient: NotionClient;
   private pairId: string;
   private pollInterval: number;
+  private currentPollInterval: number;
+  private minPollInterval: number;
+  private maxPollInterval: number;
+  private backoffFactor: number;
   private isRunning = false;
   private lastSyncAt: Date | null = null;
   private debounceWindowMs: number;
@@ -26,6 +30,10 @@ export class NotionPollerService {
     this.notionClient = config.notionClient;
     this.pairId = config.pairId;
     this.pollInterval = config.pollInterval || 60000; // Default 1 minute
+    this.minPollInterval = Number(process.env.POLLER_MIN_INTERVAL_MS || 30000); // 30s
+    this.maxPollInterval = Number(process.env.POLLER_MAX_INTERVAL_MS || 180000); // 3min
+    this.backoffFactor = Number(process.env.BACKOFF_FACTOR || 2);
+    this.currentPollInterval = this.minPollInterval;
     this.debounceWindowMs = config.debounceWindowMs ?? 30000; // Default 30s
   }
 
@@ -72,7 +80,8 @@ export class NotionPollerService {
       }
 
       if (this.isRunning) {
-        await sleep(this.pollInterval);
+        logger.debug({ interval: this.currentPollInterval }, 'Sleeping before next poll cycle');
+        await sleep(this.currentPollInterval);
       }
     }
   }
@@ -110,6 +119,31 @@ export class NotionPollerService {
       this.lastSyncAt = startTime;
 
       logger.info(`Poll cycle completed. Processed ${tasks.length} tasks`);
+      
+      // Adjust poll interval based on activity
+      if (tasks.length === 0) {
+        // No changes found, increase interval
+        const newInterval = Math.min(this.currentPollInterval * this.backoffFactor, this.maxPollInterval);
+        if (newInterval !== this.currentPollInterval) {
+          logger.info({
+            oldInterval: this.currentPollInterval,
+            newInterval,
+            reason: 'No changes detected'
+          }, 'Increasing poll interval');
+          this.currentPollInterval = newInterval;
+        }
+      } else {
+        // Changes found, reset to minimum interval
+        if (this.currentPollInterval !== this.minPollInterval) {
+          logger.info({
+            oldInterval: this.currentPollInterval,
+            newInterval: this.minPollInterval,
+            tasksFound: tasks.length,
+            reason: 'Changes detected'
+          }, 'Resetting poll interval to minimum');
+          this.currentPollInterval = this.minPollInterval;
+        }
+      }
     } catch (error) {
       logger.error({ error }, 'Failed to complete poll cycle');
       throw error;
@@ -330,6 +364,9 @@ export class NotionPollerService {
       isRunning: this.isRunning,
       lastSyncAt: this.lastSyncAt,
       pollInterval: this.pollInterval,
+      currentPollInterval: this.currentPollInterval,
+      minPollInterval: this.minPollInterval,
+      maxPollInterval: this.maxPollInterval,
     };
   }
 }

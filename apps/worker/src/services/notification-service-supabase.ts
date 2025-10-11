@@ -20,6 +20,10 @@ export class NotificationService {
   private formatter: MessageFormatter;
   private isRunning = false;
   private processInterval: number;
+  private currentProcessInterval: number;
+  private minProcessInterval: number;
+  private maxProcessInterval: number;
+  private backoffFactor: number;
   private maxRetries: number;
   private retryDelay: number;
   private maxRetryDelay: number;
@@ -31,6 +35,10 @@ export class NotificationService {
     this.pairId = config.pairId;
     this.formatter = new MessageFormatter();
     this.processInterval = config.processInterval || 5000; // Default 5 seconds
+    this.minProcessInterval = Number(process.env.NOTIFIER_MIN_INTERVAL_MS || 5000); // 5s
+    this.maxProcessInterval = Number(process.env.NOTIFIER_MAX_INTERVAL_MS || 60000); // 60s
+    this.backoffFactor = Number(process.env.BACKOFF_FACTOR || 2);
+    this.currentProcessInterval = this.minProcessInterval;
     this.maxRetries = config.maxRetries || 3;
     this.retryDelay = config.retryDelay || 1000; // base delay 1s
     this.maxRetryDelay = 30000; // cap at 30s
@@ -80,7 +88,8 @@ export class NotificationService {
       }
 
       if (this.isRunning) {
-        await sleep(this.processInterval);
+        logger.debug({ interval: this.currentProcessInterval }, 'Sleeping before next process cycle');
+        await sleep(this.currentProcessInterval);
       }
     }
   }
@@ -93,10 +102,31 @@ export class NotificationService {
     const events = await SupabaseWorkerHelpers.getUnprocessedTaskEvents(50); // Increased to handle aggregation
 
     if (events.length === 0) {
+      // No events to process, increase interval
+      const newInterval = Math.min(this.currentProcessInterval * this.backoffFactor, this.maxProcessInterval);
+      if (newInterval !== this.currentProcessInterval) {
+        logger.info({
+          oldInterval: this.currentProcessInterval,
+          newInterval,
+          reason: 'No events to process'
+        }, 'Increasing process interval');
+        this.currentProcessInterval = newInterval;
+      }
       return;
     }
 
     logger.info(`Processing ${events.length} events`);
+    
+    // Events found, reset to minimum interval
+    if (this.currentProcessInterval !== this.minProcessInterval) {
+      logger.info({
+        oldInterval: this.currentProcessInterval,
+        newInterval: this.minProcessInterval,
+        eventsFound: events.length,
+        reason: 'Events to process'
+      }, 'Resetting process interval to minimum');
+      this.currentProcessInterval = this.minProcessInterval;
+    }
 
     // Check if we should aggregate created events
     if (this.taskListOnCreate) {
@@ -666,6 +696,9 @@ export class NotificationService {
     return {
       isRunning: this.isRunning,
       processInterval: this.processInterval,
+      currentProcessInterval: this.currentProcessInterval,
+      minProcessInterval: this.minProcessInterval,
+      maxProcessInterval: this.maxProcessInterval,
     };
   }
 
