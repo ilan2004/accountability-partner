@@ -75,17 +75,45 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const signUp = async (email: string, password: string, name?: string) => {
+    if (!name) {
+      throw new Error('Username is required for signup');
+    }
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: name,
+          username: name,
         },
       },
     });
     
     if (error) throw error;
+    
+    // Create user record immediately with the username
+    if (data.user) {
+      try {
+        const { error: profileError } = await supabase
+          .from('User')
+          .upsert({
+            id: data.user.id,
+            email: email,
+            name: name, // Use the provided username
+            emailVerified: data.user.email_confirmed_at ? new Date(data.user.email_confirmed_at) : null,
+            image: data.user.user_metadata?.avatar_url,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+          
+        if (profileError) {
+          console.error('Error creating user profile:', profileError);
+        }
+      } catch (profileError) {
+        console.error('Error creating user profile:', profileError);
+      }
+    }
     
     // If user is created but not confirmed (due to email confirmation being enabled),
     // we'll need to handle this at the Supabase project level
@@ -131,9 +159,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           .insert({
             id: user.id,
             email: user.email!,
-            name: user.user_metadata?.full_name || user.email?.split('@')[0],
+            name: user.user_metadata?.username || user.user_metadata?.full_name || user.email?.split('@')[0],
             emailVerified: user.email_confirmed_at ? new Date(user.email_confirmed_at) : null,
             image: user.user_metadata?.avatar_url,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           });
 
         if (error) {

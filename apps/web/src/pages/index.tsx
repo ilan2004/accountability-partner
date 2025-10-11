@@ -17,7 +17,7 @@ export default function Home() {
           
           <div className="flex justify-center space-x-4">
             <Link
-              href="/auth/signin"
+              href="/auth/signup"
               className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
               Get Started
