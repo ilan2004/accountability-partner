@@ -88,9 +88,12 @@ export class MessageFormatter {
     
     // Add celebration based on due date
     if (context.task.dueDate) {
-      const dueDate = new Date(context.task.dueDate);
+      const dueDate = typeof context.task.dueDate === 'string' 
+        ? new Date(context.task.dueDate) 
+        : context.task.dueDate;
+      
       // Check if date is valid
-      if (isNaN(dueDate.getTime())) {
+      if (!dueDate || isNaN(dueDate.getTime())) {
         return baseMessage; // Return without celebration if date is invalid
       }
       const daysUntilDue = Math.floor(
