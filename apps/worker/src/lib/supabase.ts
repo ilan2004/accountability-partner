@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 /**
  * Supabase client for worker services
  * Uses service role key to bypass RLS for worker operations

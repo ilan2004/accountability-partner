@@ -1,12 +1,17 @@
 import { GetServerSidePropsContext } from 'next';
+import { useRouter } from 'next/router';
 import { createSSRSupabaseClient } from '@/lib/supabase';
 import Layout from '@/components/Layout';
 import { useState } from 'react';
-import Link from 'next/link';
 
 interface DashboardProps {
   tasks: any[];
   recentEvents: any[];
+  userProfile: {
+    notionId?: string;
+    name: string;
+    email: string;
+  } | null;
   stats: {
     totalTasks: number;
     completedTasks: number;
@@ -15,8 +20,9 @@ interface DashboardProps {
   };
 }
 
-export default function Dashboard({ tasks, recentEvents, stats }: DashboardProps) {
+export default function Dashboard({ tasks, recentEvents, userProfile, stats }: DashboardProps) {
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const router = useRouter();
 
   const filteredTasks = tasks.filter(task => {
     if (filter === 'pending') return task.status !== 'Done';
@@ -58,6 +64,35 @@ export default function Dashboard({ tasks, recentEvents, stats }: DashboardProps
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="mt-2 text-gray-600">Track your tasks and accountability progress</p>
         </div>
+
+        {/* Notion Connection Status */}
+        {!userProfile?.notionId && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Connect your Notion account
+                </h3>
+                <div className="mt-2 text-sm text-yellow-700">
+                  <p>To sync your tasks and receive WhatsApp notifications, please connect your Notion account.</p>
+                </div>
+                <div className="mt-4">
+                  <button
+                    onClick={() => router.push('/auth/notion-connect')}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Connect Notion
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -267,6 +302,13 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
     };
   }
 
+  // Check user's Notion connection status
+  const { data: userProfile } = await supabase
+    .from('User')
+    .select('notionId, name, email')
+    .eq('id', user.id)
+    .single();
+
   // Get user's pair
   const { data: pairs } = await supabase
     .from('Pair')
@@ -318,19 +360,21 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
+  const safeTasks = tasks || [];
   const stats = {
-    totalTasks: tasks.length,
-    completedTasks: tasks.filter(t => t.status === 'Done').length,
-    pendingTasks: tasks.filter(t => t.status !== 'Done').length,
-    overdueTasks: tasks.filter(t => 
+    totalTasks: safeTasks.length,
+    completedTasks: safeTasks.filter(t => t.status === 'Done').length,
+    pendingTasks: safeTasks.filter(t => t.status !== 'Done').length,
+    overdueTasks: safeTasks.filter(t => 
       t.status !== 'Done' && t.dueDate && new Date(t.dueDate) < today
     ).length,
   };
 
   return {
     props: {
-      tasks: JSON.parse(JSON.stringify(tasks)),
-      recentEvents: JSON.parse(JSON.stringify(recentEvents)),
+      tasks: JSON.parse(JSON.stringify(safeTasks)),
+      recentEvents: JSON.parse(JSON.stringify(recentEvents || [])),
+      userProfile: JSON.parse(JSON.stringify(userProfile)),
       stats,
     },
   };

@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
-    "build": "next build",
-    "start": "next start",
+    "dev": "npx next@15.1.3 dev -p 3000",
+    "build": "npx next@15.1.3 build",
+    "start": "npx next@15.1.3 start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "clean": "rimraf .next node_modules"

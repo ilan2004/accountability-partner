@@ -69,40 +69,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       // Handle sign in - ensure user record exists in our database
       if (event === 'SIGNED_IN' && session?.user) {
-        await ensureUserExists(session.user);
+        // Ensure user exists asynchronously (don't wait for it)
+        ensureUserExists(session.user).catch(error => {
+          console.warn('Failed to ensure user exists:', error);
+        });
         
         // Handle redirect after successful authentication
         if (typeof window !== 'undefined') {
           const currentPath = window.location.pathname;
           
-          // Only redirect if user is on auth pages
-          if (currentPath.startsWith('/auth/signin') || currentPath.startsWith('/auth/signup')) {
-            // Check if user has Notion integration set up
-            try {
-              const { data: userData } = await supabase
-                .from('User')
-                .select('notionId')
-                .eq('id', session.user.id)
-                .single();
-              
-              if (!userData?.notionId) {
-                // New user or user without Notion connection
-                setTimeout(() => {
-                  window.location.href = '/auth/notion-connect';
-                }, 500);
-              } else {
-                // Existing user with Notion connected
-                setTimeout(() => {
-                  window.location.href = '/dashboard';
-                }, 500);
-              }
-            } catch (error) {
-              console.error('Error checking user Notion status:', error);
-              // Default to dashboard if there's an error
-              setTimeout(() => {
-                window.location.href = '/dashboard';
-              }, 500);
-            }
+          // Only redirect if user is on auth pages or callback page
+          if (currentPath.startsWith('/auth/')) {
+            // Simple redirect to dashboard - let dashboard handle further routing
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 1000);
           }
         }
       }

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, withAuthProvider } from '@/contexts/AuthContext';
 import Link from 'next/link';
 
-export default function SignIn() {
+function SignIn() {
   const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -12,7 +12,7 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const { signIn, signUp, signInWithGoogle, signInWithMagicLink, user } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, signInWithMagicLink, signInWithNotion } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -55,6 +55,19 @@ export default function SignIn() {
     }
   };
 
+  const handleNotionSignIn = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setMessage('');
+      await signInWithNotion();
+    } catch (error: any) {
+      setError(error.message || 'Failed to sign in with Notion');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -64,11 +77,12 @@ export default function SignIn() {
     try {
       if (isSignUp) {
         await signUp(email, password, name);
-        setMessage('Account created successfully! You are now signed in.');
+        setMessage('Account created successfully! Redirecting...');
       } else {
         await signIn(email, password);
-        setMessage('Signed in successfully!');
+        setMessage('Signed in successfully! Redirecting...');
       }
+      // Redirect is now handled automatically by AuthContext
     } catch (error: any) {
       setError(error.message || `Failed to ${isSignUp ? 'sign up' : 'sign in'}`);
     } finally {
@@ -139,6 +153,18 @@ export default function SignIn() {
               <p className="text-sm">{message}</p>
             </div>
           )}
+          
+          {/* Notion Sign In - Featured */}
+          <button
+            onClick={handleNotionSignIn}
+            disabled={loading}
+            className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed mb-4"
+          >
+            <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466l1.823 1.447zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.84-.047 1.167-.466 1.167-1.261V6.354c0-.793-.28-1.214-.933-1.167L6.226 5.8c-.746.047-.974.42-.974 1.167v.32zm14.337-.7c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.327-1.635.047l-4.98-3.928c-.326-.233-.326-.607 0-.84l4.98-3.928c.467-.373 1.075-.373 1.635.047v-.933l.7.14c.42.047.513.467.42.887zm-8.96 2.054l-4.888 6.088c-.42.514-.7.654-.98.374-.327-.28-.327-.607 0-1.027l4.888-6.041c.28-.374.56-.42.887-.14.327.28.373.607.093.746z"/>
+            </svg>
+            {loading ? 'Connecting...' : 'Continue with Notion'}
+          </button>
           
           {/* Google Sign In */}
           <button
@@ -265,4 +291,13 @@ export default function SignIn() {
       </div>
     </div>
   );
+}
+
+export default withAuthProvider(SignIn);
+
+// Disable SSG for this page since it uses browser contexts
+export async function getServerSideProps() {
+  return {
+    props: {},
+  };
 }
