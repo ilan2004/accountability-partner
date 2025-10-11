@@ -137,51 +137,9 @@ export class NotificationService {
       this.currentProcessInterval = this.minProcessInterval;
     }
 
-    // Check if we should aggregate created events
-    if (this.taskListOnCreate) {
-      const createdEvents = events.filter(e => e.eventType === 'created');
-      const otherEvents = events.filter(e => e.eventType !== 'created');
-      
-      if (createdEvents.length > 0) {
-        // Check if all created events are within aggregation window
-        const oldestCreated = new Date(createdEvents[0].createdAt).getTime();
-        const newestCreated = new Date(createdEvents[createdEvents.length - 1].createdAt).getTime();
-        
-        if (newestCreated - oldestCreated <= this.taskListAggregationWindow) {
-          // Process as a batch
-          await this.processCreatedEventBatch(createdEvents);
-        } else {
-          // Process old ones individually, batch recent ones
-          const cutoffTime = newestCreated - this.taskListAggregationWindow;
-          const oldCreated = createdEvents.filter(e => new Date(e.createdAt).getTime() < cutoffTime);
-          const recentCreated = createdEvents.filter(e => new Date(e.createdAt).getTime() >= cutoffTime);
-          
-          // Process old ones individually
-          for (const event of oldCreated) {
-            try {
-              await this.processEvent(event);
-            } catch (error) {
-              logger.error({ error, eventId: event.id }, 'Failed to process event');
-            }
-          }
-          
-          // Batch recent ones
-          if (recentCreated.length > 0) {
-            await this.processCreatedEventBatch(recentCreated);
-          }
-        }
-        
-        // Process non-created events normally
-        for (const event of otherEvents) {
-          try {
-            await this.processEvent(event);
-          } catch (error) {
-            logger.error({ error, eventId: event.id }, 'Failed to process event');
-          }
-        }
-        return;
-      }
-    }
+    // DISABLED: Batch processing causes issues with task filtering
+    // Process all events individually for now to ensure proper notifications
+    // if (this.taskListOnCreate) { ... }
 
     // Default processing for all events
     for (const event of events) {
