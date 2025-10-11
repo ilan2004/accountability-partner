@@ -39,7 +39,7 @@ export class MessageFormatter {
     const basicMessage = this.interpolate(template, {
       owner: (context.owner as any).name,
       task: (context.task as any).title,
-      due: (context.task as any).dueDate ? this.formatDate(new Date((context.task as any).dueDate)) : 'No due date',
+      due: (context.task as any).dueDate ? this.formatDate((context.task as any).dueDate) : 'No due date',
       link: (context.task as any).notionUrl,
       previousStatus: (context.event as any).previousStatus || 'N/A',
       newStatus: (context.event as any).newStatus,
@@ -57,7 +57,7 @@ export class MessageFormatter {
             title: (context.task as any).title,
             status: (context.event as any).newStatus,
             priority: context.priority,
-            dueDate: (context.task as any).dueDate ? this.formatDate(new Date((context.task as any).dueDate)) : undefined,
+            dueDate: (context.task as any).dueDate ? this.formatDate((context.task as any).dueDate) : undefined,
           },
           user: {
             name: (context.owner as any).name || 'User',
@@ -88,8 +88,13 @@ export class MessageFormatter {
     
     // Add celebration based on due date
     if (context.task.dueDate) {
+      const dueDate = new Date(context.task.dueDate);
+      // Check if date is valid
+      if (isNaN(dueDate.getTime())) {
+        return baseMessage; // Return without celebration if date is invalid
+      }
       const daysUntilDue = Math.floor(
-        (context.task.dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        (dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       );
       
       if (daysUntilDue >= 0) {
@@ -122,14 +127,20 @@ export class MessageFormatter {
   /**
    * Format date for display
    */
-  private formatDate(date: Date): string {
+  private formatDate(date: Date | string): string {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    
+    // Check if date is valid
+    if (isNaN(dateObj.getTime())) {
+      return 'Invalid date';
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    const taskDate = new Date(date);
+    const taskDate = new Date(dateObj);
     taskDate.setHours(0, 0, 0, 0);
     
     if (taskDate.getTime() === today.getTime()) {
@@ -137,7 +148,7 @@ export class MessageFormatter {
     } else if (taskDate.getTime() === tomorrow.getTime()) {
       return 'Tomorrow';
     } else {
-      return date.toLocaleDateString('en-US', {
+      return dateObj.toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
