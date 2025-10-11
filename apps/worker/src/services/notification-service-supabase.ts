@@ -221,7 +221,7 @@ export class NotificationService {
       ? this.formatter.formatCompletedMessage(context)
       : this.formatter.formatMessage(context);
 
-    // Check if WhatsApp client is available
+    // Check if WhatsApp client is available and connected
     if (!this.whatsappClient) {
       logger.warn({ notificationId }, 'WhatsApp client not available, marking notification as failed');
       
@@ -238,9 +238,38 @@ export class NotificationService {
       throw new Error('WhatsApp client not available');
     }
 
+    // Get detailed connection info for debugging
+    const connectionInfo = this.whatsappClient.getConnectionInfo();
+    logger.info({ notificationId, connectionInfo }, 'WhatsApp connection status before sending');
+
+    // Validate connection more thoroughly
+    if (!this.whatsappClient.isConnected()) {
+      const errorMsg = 'WhatsApp client not connected';
+      logger.warn({ notificationId, connectionInfo }, errorMsg);
+      
+      // Mark as failed 
+      const { error } = await supabase
+        .from('Notification')
+        .update({ 
+          status: 'failed',
+          lastError: `${errorMsg}: ${JSON.stringify(connectionInfo)}` 
+        })
+        .eq('id', notificationId);
+
+      if (error) logger.error({ error }, 'Failed to mark notification as failed');
+      throw new Error(errorMsg);
+    }
+
     // Send with exponential backoff on failure
     let lastError: Error | null = null;
     
+    logger.info({
+      notificationId,
+      groupJid: settings.whatsappGroupJid,
+      messagePreview: message.substring(0, 100),
+      messageLength: message.length
+    }, 'About to send WhatsApp notification');
+
     for (let attempt = 0; attempt <= notification.retryCount; attempt++) {
       try {
         await this.whatsappClient.sendMessage({
@@ -266,20 +295,30 @@ export class NotificationService {
           eventId: event.id,
           eventType: event.eventType,
           task: event.taskMirror.title,
-        }, 'Notification sent successfully');
+          groupJid: settings.whatsappGroupJid
+        }, '✅ Notification sent successfully');
 
         return;
       } catch (error) {
         lastError = error as Error;
+        logger.error({
+          error,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          errorType: typeof error,
+          attempt,
+          notificationId,
+          groupJid: settings.whatsappGroupJid
+        }, `❌ Failed to send notification on attempt ${attempt + 1}`);
+        
         // exponential backoff with jitter, capped
         const base = this.retryDelay * Math.pow(2, attempt);
         const capped = Math.min(base, this.maxRetryDelay);
         const jitter = Math.floor(capped * (0.8 + Math.random() * 0.4));
-        logger.warn(
-          { error, attempt, delay: jitter },
-          `Failed to send notification, retrying in ${jitter}ms`
-        );
-        await sleep(jitter);
+        
+        if (attempt < notification.retryCount) {
+          logger.info({ attempt, delay: jitter }, `Retrying notification send in ${jitter}ms`);
+          await sleep(jitter);
+        }
       }
     }
 

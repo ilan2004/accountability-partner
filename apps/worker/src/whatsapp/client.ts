@@ -246,21 +246,55 @@ export class WhatsAppClient {
    * Send a text message
    */
   async sendMessage(message: WhatsAppMessage): Promise<void> {
-    if (!this.socket || !this.connectionState.isConnected) {
-      throw new Error('WhatsApp client is not connected');
+    if (!this.socket) {
+      const error = new Error('WhatsApp socket is null');
+      logger.error('Send message failed - socket is null', { 
+        message: message.text?.substring(0, 100), 
+        to: message.to 
+      });
+      throw error;
+    }
+
+    if (!this.connectionState.isConnected) {
+      const error = new Error('WhatsApp client is not connected');
+      logger.error('Send message failed - not connected', { 
+        message: message.text?.substring(0, 100), 
+        to: message.to,
+        connectionState: this.connectionState
+      });
+      throw error;
     }
 
     try {
       const jid = message.to.includes('@') ? message.to : `${message.to}@g.us`;
       
+      logger.info(`Attempting to send message to ${jid}`, {
+        messageLength: message.text?.length,
+        messagePreview: message.text?.substring(0, 50)
+      });
+      
       await this.socket.sendMessage(jid, {
         text: message.text,
       });
 
-      logger.info(`Message sent to ${jid}`);
+      logger.info(`✅ Message sent successfully to ${jid}`);
     } catch (error) {
-      logger.error('Failed to send message:', error);
-      throw error;
+      logger.error('❌ Failed to send message - detailed error:', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        errorType: typeof error,
+        errorStringified: JSON.stringify(error),
+        to: message.to,
+        messageLength: message.text?.length
+      });
+      
+      // Re-throw with more context
+      if (error instanceof Error) {
+        throw new Error(`WhatsApp send failed: ${error.message}`);
+      } else {
+        throw new Error(`WhatsApp send failed: ${JSON.stringify(error)}`);
+      }
     }
   }
 
@@ -326,6 +360,25 @@ export class WhatsAppClient {
    * Check if connected
    */
   isConnected(): boolean {
-    return this.connectionState.isConnected;
+    const connected = this.connectionState.isConnected && this.socket !== null;
+    logger.debug(`Connection check: connected=${connected}, socket=${!!this.socket}, state=${this.connectionState.isConnected}`);
+    return connected;
+  }
+
+  /**
+   * Get detailed connection info for debugging
+   */
+  getConnectionInfo() {
+    return {
+      isConnected: this.connectionState.isConnected,
+      hasSocket: !!this.socket,
+      socketReadyState: this.socket?.ws?.readyState,
+      reconnectAttempts: this.reconnectAttempts,
+      lastDisconnect: this.connectionState.lastDisconnect,
+      config: {
+        sessionName: this.config.sessionName,
+        authPath: this.config.authPath
+      }
+    };
   }
 }
