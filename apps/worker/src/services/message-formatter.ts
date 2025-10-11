@@ -203,3 +203,4 @@ export class MessageFormatter {
     
     return message;
   }
+}
