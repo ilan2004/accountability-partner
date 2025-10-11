@@ -243,6 +243,35 @@ export class WhatsAppClient {
   }
 
   /**
+   * Sanitize message text for WhatsApp compatibility
+   * Removes or replaces problematic characters that might cause sending to fail
+   */
+  private sanitizeMessageText(text: string): string {
+    if (!text) return text;
+
+    // Remove emojis and other unicode symbols that might cause issues
+    // This regex matches most emoji characters
+    const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
+    
+    let sanitized = text
+      .replace(emojiRegex, '') // Remove emojis
+      .replace(/[\u{FE00}-\u{FE0F}]/gu, '') // Remove variation selectors
+      .replace(/[\u{200D}]/gu, '') // Remove zero-width joiners
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+
+    logger.debug('Message sanitization:', {
+      original: text.substring(0, 50),
+      sanitized: sanitized.substring(0, 50),
+      originalLength: text.length,
+      sanitizedLength: sanitized.length,
+      hadEmojis: text !== sanitized
+    });
+
+    return sanitized;
+  }
+
+  /**
    * Send a text message
    */
   async sendMessage(message: WhatsAppMessage): Promise<void> {
@@ -268,13 +297,18 @@ export class WhatsAppClient {
     try {
       const jid = message.to.includes('@') ? message.to : `${message.to}@g.us`;
       
+      // Sanitize the message text to remove problematic characters
+      const sanitizedText = this.sanitizeMessageText(message.text || '');
+      
       logger.info(`Attempting to send message to ${jid}`, {
-        messageLength: message.text?.length,
-        messagePreview: message.text?.substring(0, 50)
+        originalLength: message.text?.length,
+        sanitizedLength: sanitizedText.length,
+        messagePreview: sanitizedText.substring(0, 50),
+        hadEmojis: message.text !== sanitizedText
       });
       
       await this.socket.sendMessage(jid, {
-        text: message.text,
+        text: sanitizedText,
       });
 
       logger.info(`✅ Message sent successfully to ${jid}`);
