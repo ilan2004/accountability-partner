@@ -3,10 +3,14 @@
 
 const express = require('express');
 const cron = require('node-cron');
+const WhatsAppBot = require('./whatsapp-bot');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Initialize WhatsApp Bot
+const whatsappBot = new WhatsAppBot();
 
 app.use(express.json());
 
@@ -21,10 +25,55 @@ app.get('/', (req, res) => {
 
 // WhatsApp bot status endpoint
 app.get('/whatsapp/status', (req, res) => {
+  const status = whatsappBot.getConnectionStatus();
   res.json({ 
     status: 'WhatsApp service ready',
-    connected: false // Will update when we implement Baileys
+    ...status,
+    uptime: process.uptime()
   });
+});
+
+// Start WhatsApp bot connection
+app.post('/whatsapp/connect', async (req, res) => {
+  try {
+    console.log('📱 Manual WhatsApp bot connection requested');
+    await whatsappBot.initialize();
+    res.json({ success: true, message: 'WhatsApp bot connection initiated' });
+  } catch (error) {
+    console.error('Error connecting WhatsApp bot:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Disconnect WhatsApp bot
+app.post('/whatsapp/disconnect', async (req, res) => {
+  try {
+    console.log('🔌 Manual WhatsApp bot disconnection requested');
+    await whatsappBot.disconnect();
+    res.json({ success: true, message: 'WhatsApp bot disconnected' });
+  } catch (error) {
+    console.error('Error disconnecting WhatsApp bot:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Send test message
+app.post('/whatsapp/test-message', async (req, res) => {
+  try {
+    const { message } = req.body;
+    const testMessage = message || '🤖 Test message from Accountability Bot';
+    
+    const result = await whatsappBot.sendMessage(testMessage);
+    
+    if (result) {
+      res.json({ success: true, message: 'Test message sent successfully' });
+    } else {
+      res.status(400).json({ success: false, error: 'Failed to send message - bot not connected' });
+    }
+  } catch (error) {
+    console.error('Error sending test message:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Webhook for manual triggers
@@ -106,14 +155,15 @@ async function sendMorningMessage() {
       console.log('✅ Morning message generated successfully');
       console.log('Message:', morningMessage);
       
-      // Here we would send to WhatsApp (will implement with Baileys)
-      // For now, just log the message
+      // Send to WhatsApp group
+      const waResult = await whatsappBot.sendMorningMessage(data.data);
       
       return { 
         success: true, 
         message: morningMessage,
         userCount: data.data.users_summaries.length,
-        missingTasks: data.data.missing_task_users.length
+        missingTasks: data.data.missing_task_users.length,
+        whatsappSent: waResult
       };
     } else {
       throw new Error('Failed to generate morning message');
@@ -150,14 +200,15 @@ async function sendEveningSummary() {
       console.log('✅ Evening summary generated successfully');
       console.log('Message:', eveningMessage);
       
-      // Here we would send to WhatsApp (will implement with Baileys)
-      // For now, just log the message
+      // Send to WhatsApp group
+      const waResult = await whatsappBot.sendEveningMessage(data.data);
       
       return { 
         success: true, 
         message: eveningMessage,
         completionRate: data.data.overall_completion_rate,
-        userCount: data.data.users_summaries.length
+        userCount: data.data.users_summaries.length,
+        whatsappSent: waResult
       };
     } else {
       throw new Error('Failed to generate evening summary');
@@ -169,17 +220,50 @@ async function sendEveningSummary() {
 }
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Railway Backend Service running on port ${PORT}`);
   console.log('📱 WhatsApp bot service initialized');
   console.log('⏰ Cron jobs scheduled for 6:00 AM and 10:00 PM IST');
   console.log('🤖 Gemini AI integration ready');
+  
+  // Initialize WhatsApp bot connection
+  if (process.env.WA_ON_DEMAND !== 'true') {
+    console.log('📱 Starting WhatsApp bot connection...');
+    try {
+      await whatsappBot.initialize();
+    } catch (error) {
+      console.error('❌ Failed to initialize WhatsApp bot:', error);
+    }
+  } else {
+    console.log('🔄 WhatsApp bot in on-demand mode');
+  }
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server')
-  server.close(() => {
-    console.log('HTTP server closed')
-  })
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM signal received: shutting down gracefully')
+  
+  // Disconnect WhatsApp bot
+  try {
+    await whatsappBot.disconnect();
+    console.log('WhatsApp bot disconnected successfully');
+  } catch (error) {
+    console.error('Error disconnecting WhatsApp bot:', error);
+  }
+  
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT signal received: shutting down gracefully')
+  
+  // Disconnect WhatsApp bot
+  try {
+    await whatsappBot.disconnect();
+    console.log('WhatsApp bot disconnected successfully');
+  } catch (error) {
+    console.error('Error disconnecting WhatsApp bot:', error);
+  }
+  
+  process.exit(0);
 });
