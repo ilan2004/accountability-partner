@@ -3,6 +3,10 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Loader2, AlertCircle } from 'lucide-react'
 
 // Force dynamic rendering for this authentication page
 export const dynamic = 'force-dynamic'
@@ -13,9 +17,15 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectedFrom = searchParams.get('redirectedFrom')
+  const urlError = searchParams.get('error')
   const supabase = createClient()
 
   useEffect(() => {
+    // Set error from URL if present
+    if (urlError) {
+      setError(decodeURIComponent(urlError))
+    }
+
     // Check if user is already logged in
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -24,7 +34,7 @@ function LoginForm() {
       }
     }
     checkUser()
-  }, [router, supabase])
+  }, [router, supabase, urlError])
 
   const handleNotionLogin = async () => {
     try {
@@ -52,89 +62,69 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 bg-indigo-600 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-lg">AP</span>
+          <div className="mx-auto h-16 w-16 bg-primary rounded-xl flex items-center justify-center mb-6">
+            <span className="text-primary-foreground font-bold text-2xl">AP</span>
           </div>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Accountability Partner
+          <h2 className="text-3xl font-bold tracking-tight">
+            Welcome back
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Sign in with your Notion account to get started
+          <p className="mt-2 text-muted-foreground">
+            Sign in to your Accountability Partners account
           </p>
         </div>
 
-        <div className="bg-white py-8 px-4 shadow-lg rounded-lg sm:px-10">
-          <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign in with Notion</CardTitle>
+            <CardDescription>
+              Connect your Notion account to sync your tasks and start tracking progress
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <div className="flex">
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-red-800">
-                      Authentication Error
-                    </h3>
-                    <div className="mt-2 text-sm text-red-700">
-                      {error}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
 
-            <button
+            <Button
               onClick={handleNotionLogin}
               disabled={isLoading}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              className="w-full"
+              size="lg"
             >
               {isLoading ? (
-                <div className="flex items-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Signing in...
-                </div>
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Connecting to Notion...
+                </>
               ) : (
-                <div className="flex items-center">
+                <>
                   <svg
-                    className="w-5 h-5 mr-3"
-                    viewBox="0 0 256 256"
+                    className="w-5 h-5 mr-2"
+                    viewBox="0 0 100 100"
                     fill="currentColor"
                   >
-                    <path d="M128 24a104 104 0 1 0 104 104A104.11 104.11 0 0 0 128 24Zm0 192a88 88 0 1 1 88-88 88.1 88.1 0 0 1-88 88Zm48-88a8 8 0 0 1-8 8h-32v32a8 8 0 0 1-16 0v-32H88a8 8 0 0 1 0-16h32V88a8 8 0 0 1 16 0v32h32a8 8 0 0 1 8 8Z"/>
+                    <path d="M6.017 0C2.734 0 0 2.733 0 6.017v87.966C0 97.267 2.734 100 6.017 100h87.966c3.283 0 6.017-2.733 6.017-6.017V6.017C100 2.733 97.266 0 93.983 0H6.017zm2.494 15.482h53.473c1.898 0 2.871.43 3.633 1.054.762.643 1.27 1.505 1.523 3.15.079.605.117 1.21.117 2.026v48.965c0 5.415-.82 8.149-2.324 10.367-1.504 2.218-3.722 4.455-5.921 5.94-2.218 1.504-4.971 2.324-10.367 2.324H31.678c-5.415 0-8.168-.82-10.367-2.324-2.218-1.485-4.436-3.722-5.94-5.94-1.485-2.218-2.306-4.952-2.306-10.367V34.312c0-5.415.82-8.168 2.305-10.367 1.505-2.237 3.723-4.455 5.941-5.94.664-.449 1.348-.801 2.071-1.095-.02.137-.039.293-.039.45v40.523c0 1.015.273 1.269 1.172 1.367.82.078 2.129.098 4.035.098h5.402c.351 0 .625-.078.859-.234.235-.156.41-.43.547-.84.137-.41.215-.957.254-1.66.04-.703.06-1.562.06-2.578V17.527c0-.586.038-1.074.117-1.445.156-.703.546-1.133.878-1.387.332-.273.82-.41 1.797-.41z"/>
                   </svg>
                   Continue with Notion
-                </div>
+                </>
               )}
-            </button>
+            </Button>
 
             <div className="text-center">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 By signing in, you agree to sync your tasks and receive WhatsApp notifications
               </p>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="text-center text-sm text-gray-600">
+        <div className="text-center text-sm text-muted-foreground">
           <p>
             This is a private system for Ilan and Sidra's accountability partnership.
           </p>
@@ -146,7 +136,14 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4"><div className="text-center">Loading...</div></div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+          <p className="mt-2 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
       <LoginForm />
     </Suspense>
   )

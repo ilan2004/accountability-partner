@@ -1,60 +1,146 @@
-import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase-server'
-import { NextRequest } from 'next/server'
-import { redirect } from 'next/navigation'
+'use client'
 
-// Force dynamic rendering for this authentication page
-export const dynamic = 'force-dynamic'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
+import { Card, CardContent } from '@/components/ui/card'
+import { Loader2 } from 'lucide-react'
 
-export default async function AuthCallback({
-  searchParams,
-}: {
-  searchParams: Promise<{ code?: string; redirectedFrom?: string }>
-}) {
-  const supabase = await createServerSupabaseClient()
-  const params = await searchParams
-
-  if (params.code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(params.code)
-    
-    if (error) {
-      console.error('Error exchanging code for session:', error)
-      redirect('/login?error=auth_callback_error')
-    }
-
-    if (data.session) {
-      const { user } = data.session
+function AuthCallbackInner() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [error, setError] = useState<string | null>(null)
+  
+  useEffect(() => {
+    const handleCallback = async () => {
+      const code = searchParams.get('code')
+      const error = searchParams.get('error')
+      const errorDescription = searchParams.get('error_description')
+      const redirectedFrom = searchParams.get('redirectedFrom')
       
-      // Use admin client to check and create users (bypass RLS)
-      const adminSupabase = createAdminClient()
+      console.log('Auth callback params:', { code, error, errorDescription, redirectedFrom })
       
-      // Check if user exists in our database
-      const { data: existingUser } = await adminSupabase
-        .from('users')
-        .select('*')
-        .eq('notion_id', user.id)
-        .single()
-
-      // If user doesn't exist, create them
-      if (!existingUser) {
-        const { error: insertError } = await adminSupabase
-          .from('users')
-          .insert({
-            notion_id: user.id,
-            name: user.user_metadata?.name || user.email || 'User',
-          })
-
-        if (insertError) {
-          console.error('Error creating user:', insertError)
-          // Continue anyway, they might still be able to use the app
-        }
+      // Handle OAuth errors
+      if (error) {
+        console.error('OAuth error:', error, errorDescription)
+        router.push(`/login?error=${encodeURIComponent(errorDescription || error)}`)
+        return
       }
-
-      // Redirect to the originally requested page or dashboard
-      const redirectTo = params.redirectedFrom || '/dashboard'
-      redirect(redirectTo)
+      
+      // No code provided
+      if (!code) {
+        console.log('No code provided')
+        router.push('/login?error=no_code')
+        return
+      }
+      
+      try {
+        const supabase = createClient()
+        
+        // Exchange code for session - this happens automatically in the client
+        // when the page loads with a valid code
+        
+        // Wait a bit for the auth to process
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Check if we have a session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError)
+          throw sessionError
+        }
+        
+        if (!session) {
+          console.error('No session after auth callback')
+          throw new Error('Authentication failed - no session created')
+        }
+        
+        console.log('Authentication successful:', session.user.id)
+        
+        // Create user in database if needed
+        try {
+          const { data: existingUser } = await supabase
+            .from('users')
+            .select('*')
+            .eq('notion_id', session.user.id)
+            .single()
+          
+          if (!existingUser) {
+            const userData = {
+              notion_id: session.user.id,
+              name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+            }
+            
+            console.log('Creating new user:', userData)
+            
+            const { error: insertError } = await supabase
+              .from('users')
+              .insert(userData)
+            
+            if (insertError) {
+              console.error('Error creating user:', insertError)
+              // Don't fail auth because of this
+            }
+          }
+        } catch (dbError) {
+          console.error('Database error:', dbError)
+          // Continue anyway
+        }
+        
+        // Redirect to dashboard or requested page
+        const redirectTo = redirectedFrom || '/dashboard'
+        console.log('Redirecting to:', redirectTo)
+        router.push(redirectTo)
+        
+      } catch (error: any) {
+        console.error('Auth callback error:', error)
+        setError(error.message || 'Authentication failed')
+        setTimeout(() => {
+          router.push(`/login?error=${encodeURIComponent(error.message || 'auth_failed')}`)
+        }, 2000)
+      }
     }
-  }
+    
+    handleCallback()
+  }, [router, searchParams])
+  
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardContent className="pt-6">
+          {error ? (
+            <div className="text-center space-y-4">
+              <div className="text-red-600 font-medium">{error}</div>
+              <div className="text-sm text-muted-foreground">Redirecting to login...</div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <p className="text-muted-foreground">Completing authentication...</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
 
-  // Fallback redirect if something went wrong
-  redirect('/login?error=auth_failed')
+export default function AuthCallback() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <p className="text-muted-foreground">Loading...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <AuthCallbackInner />
+    </Suspense>
+  )
 }

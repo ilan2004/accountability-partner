@@ -3,15 +3,28 @@ import type { NextRequest } from 'next/server'
 import { createMiddlewareSupabaseClient } from '@/lib/supabase-server'
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next()
+  // Skip middleware for auth routes and API routes
+  if (request.nextUrl.pathname.startsWith('/auth/') || 
+      request.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+
+  // Create response first
+  const response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
+
+  // Create supabase client with the response
   const supabase = createMiddlewareSupabaseClient(request, response)
 
-  // Refresh session if expired
-  await supabase.auth.getSession()
-
+  // Get session
   const {
     data: { session },
   } = await supabase.auth.getSession()
+
+  console.log(`[Middleware] Path: ${request.nextUrl.pathname}, Session: ${session?.user?.id ? 'Present' : 'None'}`)
 
   // Protected routes
   const protectedPaths = ['/dashboard', '/settings', '/api/tasks', '/api/users', '/api/settings']
@@ -19,6 +32,7 @@ export async function middleware(request: NextRequest) {
 
   // Redirect to login if not authenticated and trying to access protected route
   if (isProtectedPath && !session) {
+    console.log('[Middleware] Redirecting to login - no session')
     const redirectUrl = new URL('/login', request.url)
     redirectUrl.searchParams.set('redirectedFrom', request.nextUrl.pathname)
     return NextResponse.redirect(redirectUrl)
@@ -26,17 +40,19 @@ export async function middleware(request: NextRequest) {
 
   // Redirect to dashboard if authenticated and trying to access login
   if (request.nextUrl.pathname === '/login' && session) {
+    console.log('[Middleware] User already authenticated, redirecting to dashboard')
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  // Redirect root to appropriate page
-  if (request.nextUrl.pathname === '/') {
-    if (session) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    } else {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-  }
+  // Don't redirect root page - let it handle its own logic
+  // This allows the homepage to show properly
+  // if (request.nextUrl.pathname === '/') {
+  //   if (session) {
+  //     return NextResponse.redirect(new URL('/dashboard', request.url))
+  //   } else {
+  //     return NextResponse.redirect(new URL('/login', request.url))
+  //   }
+  // }
 
   return response
 }

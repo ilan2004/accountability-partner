@@ -1,5 +1,11 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Separator } from '@/components/ui/separator'
+import { ClipboardList, CheckCircle2, Zap, Users, TrendingUp, Clock, MessageSquare, Plus, ChevronRight, Activity } from 'lucide-react'
 
 // Force dynamic rendering for this authenticated page
 export const dynamic = 'force-dynamic'
@@ -23,78 +29,209 @@ export default async function DashboardPage() {
     .single()
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Welcome to Your Accountability Dashboard
-          </h1>
-          
-          {user && (
-            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-              <p className="text-blue-800">
-                Hello, <span className="font-semibold">{user.name}</span>! 
-                Your system is being set up...
-              </p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white">
-              <h3 className="text-lg font-semibold mb-2">Today's Tasks</h3>
-              <p className="text-3xl font-bold">0</p>
-              <p className="text-blue-100">Tasks completed</p>
-            </div>
-
-            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white">
-              <h3 className="text-lg font-semibold mb-2">This Week</h3>
-              <p className="text-3xl font-bold">0%</p>
-              <p className="text-green-100">Completion rate</p>
-            </div>
-
-            <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-6 text-white">
-              <h3 className="text-lg font-semibold mb-2">Partner Status</h3>
-              <p className="text-lg font-semibold">Setting up...</p>
-              <p className="text-purple-100">WhatsApp integration</p>
-            </div>
-          </div>
-
-          <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-3">
+              <div className="h-10 w-10 bg-primary rounded-lg flex items-center justify-center">
+                <span className="text-primary-foreground font-bold">AP</span>
               </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">
-                  System Setup in Progress
-                </h3>
-                <div className="mt-2 text-sm text-yellow-700">
-                  <p>
-                    Your accountability system is being set up. The following features will be available soon:
-                  </p>
-                  <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li>Task management and tracking</li>
-                    <li>WhatsApp notifications and reminders</li>
-                    <li>Daily progress summaries</li>
-                    <li>Real-time partner updates</li>
-                  </ul>
+              <h1 className="text-2xl font-bold">
+                Dashboard
+              </h1>
+            </div>
+            <form action="/auth/logout" method="post">
+              <Button type="submit" variant="outline" size="sm">
+                Sign Out
+              </Button>
+            </form>
+          </div>
+        </div>
+      </header>
+
+      <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome Section */}
+        {user && (
+          <Card className="bg-primary text-primary-foreground mb-8">
+            <CardContent className="pt-8 pb-8">
+              <h2 className="text-3xl font-bold mb-2">
+                Welcome back, {user.name}! 👋
+              </h2>
+              <p className="text-primary-foreground/90 text-lg">
+                Let's make today count. Your accountability partner is counting on you!
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Today's Tasks</CardTitle>
+              <ClipboardList className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">12</div>
+              <p className="text-xs text-muted-foreground">3 completed</p>
+              <Progress value={25} className="mt-2" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Week Progress</CardTitle>
+              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">68%</div>
+              <p className="text-xs text-muted-foreground">
+                <TrendingUp className="inline h-3 w-3 mr-1" />
+                12% from last week
+              </p>
+              <Progress value={68} className="mt-2" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Partners</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">2</div>
+              <div className="flex gap-2 mt-2">
+                <Badge variant="secondary">Active</Badge>
+                <Badge variant="secondary">Active</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Day Streak</CardTitle>
+              <Zap className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">5</div>
+              <p className="text-xs text-muted-foreground">Keep it going!</p>
+              <div className="flex gap-1 mt-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-2 w-2 rounded-full bg-primary" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Activity Timeline */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Activity className="h-5 w-5 mr-2" />
+              Recent Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm">You completed <span className="font-semibold">"Morning Review"</span></p>
+                  <p className="text-xs text-muted-foreground">2 hours ago</p>
+                </div>
+              </div>
+              <Separator />
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Plus className="h-4 w-4 text-primary" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm">Partner added <span className="font-semibold">3 new tasks</span></p>
+                  <p className="text-xs text-muted-foreground">5 hours ago</p>
+                </div>
+              </div>
+              <Separator />
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <MessageSquare className="h-4 w-4 text-primary" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm">Morning summary sent to WhatsApp</p>
+                  <p className="text-xs text-muted-foreground">Today at 6:00 AM</p>
                 </div>
               </div>
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          <div className="mt-6 flex justify-end">
-            <form action="/auth/logout" method="post">
-              <button
-                type="submit"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-              >
-                Sign Out
-              </button>
-            </form>
-          </div>
+        {/* Quick Actions & Status */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button variant="outline" className="w-full justify-between" asChild>
+                <a href="#">
+                  View Today's Tasks
+                  <ChevronRight className="h-4 w-4" />
+                </a>
+              </Button>
+              <Button variant="outline" className="w-full justify-between" asChild>
+                <a href="#">
+                  Check Partner Progress
+                  <ChevronRight className="h-4 w-4" />
+                </a>
+              </Button>
+              <Button variant="outline" className="w-full justify-between" asChild>
+                <a href="#">
+                  Weekly Report
+                  <ChevronRight className="h-4 w-4" />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>System Status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">WhatsApp Bot</span>
+                <Badge variant="secondary" className="bg-green-100 text-green-700">Connected</Badge>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Notion Sync</span>
+                <Badge variant="secondary" className="bg-green-100 text-green-700">Active</Badge>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Next Sync</span>
+                <span className="text-sm font-medium flex items-center">
+                  <Clock className="h-3 w-3 mr-1" />
+                  in 3 minutes
+                </span>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Last Message</span>
+                <span className="text-sm font-medium">10:00 PM</span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
