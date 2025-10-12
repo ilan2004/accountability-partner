@@ -1,6 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 
+// Force dynamic rendering for this authenticated page
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardPage() {
   const supabase = await createServerSupabaseClient()
   

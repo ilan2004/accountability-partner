@@ -2,6 +2,9 @@ import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase-se
 import { NextRequest } from 'next/server'
 import { redirect } from 'next/navigation'
 
+// Force dynamic rendering for this authentication page
+export const dynamic = 'force-dynamic'
+
 export default async function AuthCallback({
   searchParams,
 }: {
