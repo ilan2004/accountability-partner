@@ -11,19 +11,26 @@ import type {
 } from '@/types'
 
 class GeminiService {
-  private genAI: GoogleGenerativeAI
-  private model: any
+  private genAI: GoogleGenerativeAI | null = null
+  private model: any = null
+  private initialized = false
 
   constructor() {
+    // Only initialize if API key is available
     const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is required')
+    if (apiKey) {
+      this.genAI = new GoogleGenerativeAI(apiKey)
+      this.model = this.genAI.getGenerativeModel({ 
+        model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' 
+      })
+      this.initialized = true
     }
+  }
 
-    this.genAI = new GoogleGenerativeAI(apiKey)
-    this.model = this.genAI.getGenerativeModel({ 
-      model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' 
-    })
+  private checkInitialized() {
+    if (!this.initialized || !this.model) {
+      throw new Error('Gemini service not initialized - GEMINI_API_KEY is required')
+    }
   }
 
   /**
@@ -39,6 +46,7 @@ class GeminiService {
     }
   ): Promise<GeminiTaskParseResult> {
     try {
+      this.checkInitialized()
       const prompt = this.buildTaskParsingPrompt(message, context)
       
       const result = await this.model.generateContent(prompt)
@@ -66,6 +74,7 @@ class GeminiService {
    */
   async formatMorningMessage(data: MorningMessageData): Promise<string> {
     try {
+      this.checkInitialized()
       const prompt = this.buildMorningMessagePrompt(data)
       
       const result = await this.model.generateContent(prompt)
@@ -84,6 +93,7 @@ class GeminiService {
    */
   async formatEveningMessage(data: EveningMessageData): Promise<string> {
     try {
+      this.checkInitialized()
       const prompt = this.buildEveningMessagePrompt(data)
       
       const result = await this.model.generateContent(prompt)
@@ -105,6 +115,7 @@ class GeminiService {
     possibleInterpretations: string[]
   ): Promise<string> {
     try {
+      this.checkInitialized()
       const prompt = `
 You are an accountability partner assistant. The user said: "${message}"
 
@@ -318,8 +329,31 @@ Generate the complete evening summary:
   }
 }
 
-// Export singleton instance
-export const geminiService = new GeminiService()
+// Lazy initialization to avoid build-time errors
+let _geminiService: GeminiService | null = null
+
+export const getGeminiService = (): GeminiService => {
+  if (!_geminiService) {
+    _geminiService = new GeminiService()
+  }
+  return _geminiService
+}
+
+// Export for backward compatibility
+export const geminiService = {
+  parseTaskIntent: async (...args: Parameters<GeminiService['parseTaskIntent']>) => {
+    return getGeminiService().parseTaskIntent(...args)
+  },
+  formatMorningMessage: async (...args: Parameters<GeminiService['formatMorningMessage']>) => {
+    return getGeminiService().formatMorningMessage(...args)
+  },
+  formatEveningMessage: async (...args: Parameters<GeminiService['formatEveningMessage']>) => {
+    return getGeminiService().formatEveningMessage(...args)
+  },
+  handleAmbiguousInput: async (...args: Parameters<GeminiService['handleAmbiguousInput']>) => {
+    return getGeminiService().handleAmbiguousInput(...args)
+  }
+}
 
 // Export class for testing
 export { GeminiService }
