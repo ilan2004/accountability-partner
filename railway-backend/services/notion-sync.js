@@ -127,7 +127,7 @@ class NotionSyncService {
         database_id: databaseId,
         sorts: [
           {
-            property: 'Created',
+            timestamp: 'created_time',
             direction: 'descending'
           }
         ]
@@ -151,12 +151,12 @@ class NotionSyncService {
       // Extract common task properties - adjust based on your Notion setup
       const task = {
         notion_id: page.id,
-        task_name: this.extractTitle(properties['Name'] || properties['Task'] || properties['Title']),
+        task_name: this.extractTitle(properties['Task name'] || properties['Name'] || properties['Task'] || properties['Title']),
         description: this.extractRichText(properties['Description']),
         status: this.extractStatus(properties['Status']),
         priority: this.extractSelect(properties['Priority']),
-        effort_level: this.extractSelect(properties['Effort'] || properties['Effort Level']),
-        due_date: this.extractDate(properties['Due Date'] || properties['Due']),
+        effort_level: this.extractSelect(properties['Effort level'] || properties['Effort'] || properties['Effort Level']),
+        due_date: this.extractDate(properties['Due date'] || properties['Due Date'] || properties['Due']),
         created_at: page.created_time,
         updated_at: page.last_edited_time
       };
