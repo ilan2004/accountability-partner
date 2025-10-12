@@ -173,14 +173,8 @@ class WhatsAppNotificationBot {
     try {
       console.log('🌅 Sending morning task summary...');
       
-      const message = `🌅 **Good Morning, Accountability Partners!**
-
-${summaryData.formatted_message}
-
-📅 Date: ${summaryData.date}
-🕕 Time: 06:00 IST
-
-Let's make today productive! 💪`;
+      // The formatted message already contains everything we need
+      const message = summaryData.formatted_message;
 
       const success = await this.sendMessage(message);
       if (success) {
@@ -198,15 +192,8 @@ Let's make today productive! 💪`;
     try {
       console.log('🌙 Sending evening completion summary...');
       
-      const message = `🌙 **End of Day Summary**
-
-${summaryData.formatted_message}
-
-📊 Overall Completion Rate: ${summaryData.overall_completion_rate}%
-📅 Date: ${summaryData.date}
-🕙 Time: 22:00 IST
-
-${summaryData.motivational_message}`;
+      // The formatted message already contains everything we need
+      const message = summaryData.formatted_message;
 
       const success = await this.sendMessage(message);
       if (success) {

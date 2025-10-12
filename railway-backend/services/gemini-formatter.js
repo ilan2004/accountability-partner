@@ -18,7 +18,7 @@ class GeminiFormatterService {
 
     this.genAI = new GoogleGenerativeAI(apiKey);
     this.model = this.genAI.getGenerativeModel({ 
-      model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' 
+      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp' 
     });
     
     console.log('🤖 Gemini Formatter Service initialized');
@@ -276,25 +276,44 @@ Generate a bulk update notification:`;
    */
   getFallbackEveningMessage(data) {
     let message = '🌙 **End of Day Summary**\n\n';
+    message += 'Hey Ilan and Sidra!\n\n';
+    message += 'Wrapping up our day, and wanted to check in on progress.\n\n';
     
+    // Add individual user summaries with personalized messages
     for (const summary of data.users_summaries) {
-      const emoji = summary.user.name === 'Ilan' ? '🧑‍💻' : '👩‍🎓';
-      message += `${emoji} **${summary.user.name}** — ${summary.completed_count}/${summary.total_count} tasks completed`;
-      if (summary.completion_rate > 0) {
-        message += ` (${summary.completion_rate}%)`;
+      message += `**${summary.user.name}**: ${summary.completed_count}/${summary.total_count} tasks completed.\n`;
+      
+      // List completed tasks if any
+      if (summary.completed_count > 0) {
+        const completedTasks = summary.tasks.filter(t => t.status === 'done');
+        message += 'Completed tasks:\n';
+        completedTasks.forEach(task => {
+          message += `  ✅ ${task.task_name}\n`;
+        });
+        message += '\n';
       }
-      message += '\n';
+      
+      // Add personalized motivation based on completion
+      if (summary.completed_count === 0 && summary.total_count > 0) {
+        message += `Alright ${summary.user.name}, no worries at all! Even starting is a victory. Tomorrow is a fresh start! 🌱 `;
+        message += `Let's tackle those tasks with renewed energy. Remember, you got this!\n\n`;
+      } else if (summary.completion_rate < 50) {
+        message += `Good start ${summary.user.name}! Progress is progress, no matter the pace. `;
+        message += `Tomorrow let's keep building on this momentum! 💪\n\n`;
+      } else if (summary.completion_rate < 80) {
+        message += `Great progress ${summary.user.name}! You're really getting things done. `;
+        message += `Keep up the excellent work! 🎯\n\n`;
+      } else {
+        message += `Outstanding work ${summary.user.name}! You absolutely crushed it today! 🔥 `;
+        message += `This is the energy we love to see!\n\n`;
+      }
     }
     
-    message += `\nOverall: ${data.overall_completion_rate}% completed\n\n`;
+    // Add closing motivation
+    message += "Let's make tomorrow awesome! ✨\n\n";
     
-    if (data.overall_completion_rate >= 80) {
-      message += 'Excellent work today! 🔥';
-    } else if (data.overall_completion_rate >= 60) {
-      message += 'Good progress today! 💪';
-    } else {
-      message += 'Every step counts! 🌱';
-    }
+    // Add simple statistics
+    message += `📊 Overall Completion Rate: ${data.overall_completion_rate}%`;
     
     return message;
   }

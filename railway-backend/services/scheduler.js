@@ -313,19 +313,18 @@ class SchedulerService {
       let totalCompleted = 0;
 
       for (const user of users) {
-        // Get user's tasks for today
+        // Get all user's tasks (not just today's)
         const { data: allTasks } = await this.supabase
           .from('tasks')
           .select('*')
-          .eq('user_id', user.id)
-          .or(`due_date.eq.${today},created_at.gte.${today}T00:00:00.000Z`);
+          .eq('user_id', user.id);
 
+        // Get completed tasks (regardless of when they were completed)
         const { data: completedTasks } = await this.supabase
           .from('tasks')
           .select('*')
           .eq('user_id', user.id)
-          .eq('status', 'done')
-          .gte('updated_at', `${today}T00:00:00.000Z`);
+          .eq('status', 'done');
 
         const userTaskCount = allTasks?.length || 0;
         const userCompletedCount = completedTasks?.length || 0;

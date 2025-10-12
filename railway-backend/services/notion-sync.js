@@ -123,14 +123,11 @@ class NotionSyncService {
 
   async fetchTasksFromNotion(notion, databaseId) {
     try {
+      // Query without sorting to avoid property name issues
+      console.log('🗒️ Fetching tasks from Notion database...');
       const response = await notion.databases.query({
-        database_id: databaseId,
-        sorts: [
-          {
-            timestamp: 'created_time',
-            direction: 'descending'
-          }
-        ]
+        database_id: databaseId
+        // Removed sorting to avoid property name conflicts
       });
 
       const tasks = response.results.map(page => {
@@ -148,6 +145,14 @@ class NotionSyncService {
     try {
       const properties = page.properties;
       
+      // Debug: Log all property keys available
+      console.log('📋 Task properties available:', Object.keys(properties));
+      
+      // Debug: Log the actual Status property structure
+      if (properties['Status']) {
+        console.log('🔍 Status property structure:', JSON.stringify(properties['Status'], null, 2));
+      }
+      
       // Extract common task properties - adjust based on your Notion setup
       const task = {
         notion_id: page.id,
@@ -161,6 +166,9 @@ class NotionSyncService {
         updated_at: page.last_edited_time
       };
 
+      // Debug: Log extracted values
+      console.log(`✅ Parsed task: "${task.task_name}" - Status: "${task.status}"`);
+      
       // Validate required fields
       if (!task.task_name) {
         console.log('⚠️ Skipping task with no name:', page.id);
@@ -192,6 +200,16 @@ class NotionSyncService {
       // Map Notion status to our enum
       if (status.includes('done') || status.includes('complete')) return 'done';
       if (status.includes('progress') || status.includes('working')) return 'in_progress';
+      return 'not_started';
+    }
+    
+    if (statusProperty.status) {
+      // Handle status type (newer Notion databases use 'status' type)
+      const status = statusProperty.status.name.toLowerCase();
+      // Note: Notion returns "Done" with capital D, so we convert to lowercase for comparison
+      if (status === 'done' || status.includes('done') || status.includes('complete')) return 'done';
+      if (status === 'in progress' || status.includes('progress') || status.includes('working')) return 'in_progress';
+      if (status === 'not started' || status.includes('not started')) return 'not_started';
       return 'not_started';
     }
     
