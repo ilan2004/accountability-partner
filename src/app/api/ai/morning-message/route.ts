@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { geminiService } from '@/services/gemini'
 import { createAdminClient } from '@/lib/supabase-server'
-import type { MorningMessageData, DailyTaskSummary } from '@/types'
+import type { MorningMessageData } from '@/types'
+
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 // GET /api/ai/morning-message - Generate morning message for all users
 export async function GET(request: NextRequest) {

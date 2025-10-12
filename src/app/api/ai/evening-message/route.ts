@@ -3,6 +3,10 @@ import { geminiService } from '@/services/gemini'
 import { createAdminClient } from '@/lib/supabase-server'
 import type { EveningMessageData, DailyTaskSummary } from '@/types'
 
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 // GET /api/ai/evening-message - Generate evening summary for all users
 export async function GET(request: NextRequest) {
   try {

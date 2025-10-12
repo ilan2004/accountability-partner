@@ -39,9 +39,18 @@ When deploying to Vercel, you need to set the following environment variables in
 - Make sure to use `NEXT_PUBLIC_` prefix for variables that need to be accessible on the client side
 - Don't commit any `.env` files with actual values to your repository
 
-## Build Error Fix
+## Build Error Fixes
 
+### 1. GEMINI_API_KEY Error
 If you encounter the "GEMINI_API_KEY is required" error during build, the code has been updated to handle missing API keys gracefully. The Gemini service will only initialize if the API key is available.
+
+### 2. Supabase Environment Variables Error
+API routes that require Supabase are configured as dynamic routes to prevent build-time execution. The routes will validate environment variables at runtime, not during build.
+
+### Build Configuration
+- API routes use `export const dynamic = 'force-dynamic'` to prevent static generation
+- Environment variables are validated at runtime, not build time
+- Dummy values are used during build if necessary
 
 ## Post-Deployment
 
