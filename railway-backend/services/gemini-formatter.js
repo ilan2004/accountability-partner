@@ -36,7 +36,11 @@ class GeminiFormatterService {
       
       return response.text();
     } catch (error) {
-      console.error('❌ Error formatting morning message:', error);
+      if (error.status === 429) {
+        console.error('⚠️ Gemini API quota exceeded - using fallback message');
+      } else {
+        console.error('❌ Error formatting morning message:', error);
+      }
       return this.getFallbackMorningMessage(summaryData);
     }
   }
@@ -53,7 +57,11 @@ class GeminiFormatterService {
       
       return response.text();
     } catch (error) {
-      console.error('❌ Error formatting evening message:', error);
+      if (error.status === 429) {
+        console.error('⚠️ Gemini API quota exceeded - using fallback message');
+      } else {
+        console.error('❌ Error formatting evening message:', error);
+      }
       return this.getFallbackEveningMessage(summaryData);
     }
   }
@@ -70,7 +78,11 @@ class GeminiFormatterService {
       
       return response.text();
     } catch (error) {
-      console.error('❌ Error formatting task update message:', error);
+      if (error.status === 429) {
+        console.error('⚠️ Gemini API quota exceeded - using fallback message');
+      } else {
+        console.error('❌ Error formatting task update message:', error);
+      }
       return this.getFallbackTaskUpdateMessage(updateData);
     }
   }
@@ -87,7 +99,11 @@ class GeminiFormatterService {
       
       return response.text();
     } catch (error) {
-      console.error('❌ Error formatting bulk update message:', error);
+      if (error.status === 429) {
+        console.error('⚠️ Gemini API quota exceeded - using fallback message');
+      } else {
+        console.error('❌ Error formatting bulk update message:', error);
+      }
       return this.getFallbackBulkUpdateMessage(bulkData);
     }
   }

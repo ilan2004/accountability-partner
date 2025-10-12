@@ -3,8 +3,6 @@ command = "npm install"
 
 [deploy]
 startCommand = "npm start"
-healthcheckPath = "/"
-healthcheckTimeout = 300
 restartPolicyType = "always"
 
 [[services]]

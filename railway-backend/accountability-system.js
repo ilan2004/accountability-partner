@@ -1,8 +1,16 @@
 #!/usr/bin/env node
 
+// Load environment variables
+require('dotenv').config();
+
+// Apply optimizations for Railway deployment
+const optimization = require('./config/optimization');
+optimization.applyOptimizations();
+
 const SchedulerService = require('./services/scheduler');
 const NotionSyncService = require('./services/notion-sync');
 const WhatsAppNotificationBot = require('./whatsapp-notification-bot');
+const HealthCheckServer = require('./health-server');
 
 /**
  * Main Accountability System Service
@@ -16,6 +24,7 @@ const WhatsAppNotificationBot = require('./whatsapp-notification-bot');
 class AccountabilitySystem {
   constructor() {
     this.scheduler = null;
+    this.healthServer = null;
     this.isRunning = false;
     
     // Handle graceful shutdown
@@ -35,6 +44,10 @@ class AccountabilitySystem {
       
       // Validate environment variables
       this.validateEnvironment();
+      
+      // Start health check server for Railway
+      this.healthServer = new HealthCheckServer();
+      this.healthServer.start();
       
       // Initialize scheduler (includes WhatsApp bot and Notion sync)
       this.scheduler = new SchedulerService();
@@ -70,6 +83,11 @@ class AccountabilitySystem {
       if (this.scheduler) {
         this.scheduler.stopAllJobs();
         console.log('⏸️ Stopped all scheduled jobs');
+      }
+      
+      if (this.healthServer) {
+        this.healthServer.stop();
+        console.log('⏸️ Stopped health check server');
       }
       
       // Give some time for cleanup
@@ -174,7 +192,8 @@ if (require.main === module) {
   
   switch (command) {
     case 'start':
-    default:
+    case undefined:
+    case '':
       system.start();
       break;
       
@@ -250,8 +269,10 @@ Examples:
       break;
       
     default:
-      console.log('❌ Unknown command. Use "help" for available commands.');
-      process.exit(1);
+      // Unknown command - just start the system (Railway deployment)
+      console.log(`⚠️ Unknown command "${command}", starting system...`);
+      system.start();
+      break;
   }
 } else {
   // Export for use as module
