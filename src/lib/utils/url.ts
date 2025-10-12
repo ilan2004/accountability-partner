@@ -11,9 +11,11 @@ export function getURL(): string {
   }
   
   // Server-side: use environment variables
+  // Support multiple common variable names to avoid misconfigurations
   let url =
-    process?.env?.NEXT_PUBLIC_SITE_URL ?? // Set this in your environment variables
-    process?.env?.NEXT_PUBLIC_VERCEL_URL ?? // Automatically set by Vercel
+    process?.env?.NEXT_PUBLIC_SITE_URL ?? // Preferred explicit site URL
+    process?.env?.NEXT_PUBLIC_APP_URL ?? // Some docs/environments use this name
+    process?.env?.NEXT_PUBLIC_VERCEL_URL ?? // Automatically set by Vercel (domain only)
     'http://localhost:3000'
 
   // Make sure to include `https://` when not localhost.
