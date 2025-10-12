@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle } from 'lucide-react'
+import { getAuthCallbackURL } from '@/lib/utils/url'
 
 // Force dynamic rendering for this authentication page
 export const dynamic = 'force-dynamic'
@@ -44,9 +45,7 @@ function LoginForm() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'notion',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback${
-            redirectedFrom ? `?redirectedFrom=${encodeURIComponent(redirectedFrom)}` : ''
-          }`,
+          redirectTo: getAuthCallbackURL(redirectedFrom),
         },
       })
 

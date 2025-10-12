@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { getURL, getAuthCallbackURL } from '@/lib/utils/url'
 
 export default function AuthDebugPage() {
   const [loading, setLoading] = useState(true)
@@ -106,7 +107,7 @@ export default function AuthDebugPage() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'notion',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: getAuthCallbackURL()
         },
       })
       
@@ -235,8 +236,8 @@ export default function AuthDebugPage() {
               <li>If still not working, check Supabase dashboard:</li>
               <ul className="list-disc list-inside ml-6 mt-2 space-y-1">
                 <li>Authentication → Providers → Notion is enabled</li>
-                <li>Redirect URL is set to: http://localhost:3000/auth/callback</li>
-                <li>Site URL is set to: http://localhost:3000</li>
+                <li>Redirect URL is set to: <code className="text-xs bg-muted px-1 py-0.5 rounded">{getURL()}auth/callback</code></li>
+                <li>Site URL is set to: <code className="text-xs bg-muted px-1 py-0.5 rounded">{getURL()}</code></li>
               </ul>
             </ol>
           </CardContent>
