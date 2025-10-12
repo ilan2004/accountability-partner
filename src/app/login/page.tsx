@@ -42,10 +42,13 @@ function LoginForm() {
       setIsLoading(true)
       setError(null)
 
+      const callbackUrl = getAuthCallbackURL(redirectedFrom)
+      console.log('OAuth Callback URL:', callbackUrl)
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'notion',
         options: {
-          redirectTo: getAuthCallbackURL(redirectedFrom),
+          redirectTo: callbackUrl,
         },
       })
 

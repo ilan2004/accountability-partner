@@ -221,6 +221,28 @@ ${updateData.user_name} added a new task:
 📋 "${updateData.task_name}"
 
 ${updateData.contextual_message || ''}`;
+          
+          // Add task list if provided
+          if (updateData.task_list && updateData.task_list.length > 0) {
+            message += `\n\n📝 **Updated Task List for ${updateData.user_name}:**\n`;
+            updateData.task_list.forEach((task, index) => {
+              const emoji = task.priority === 'high' ? '🔥' : task.priority === 'medium' ? '🟡' : '🟢';
+              let taskLine = `${index + 1}. ${task.task_name} ${emoji}`;
+              if (task.due_date) {
+                const dueDate = new Date(task.due_date).toLocaleDateString('en-IN', { 
+                  day: 'numeric',
+                  month: 'short',
+                  weekday: 'short'
+                });
+                taskLine += ` (Due: ${dueDate})`;
+              }
+              message += `${taskLine}\n`;
+            });
+            
+            // Add task count summary
+            const taskCount = updateData.task_list.length;
+            message += `\n🎯 Total pending tasks: ${taskCount}`;
+          }
           break;
           
         case 'task_completed':

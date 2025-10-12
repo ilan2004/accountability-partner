@@ -5,15 +5,8 @@
 export function getURL(): string {
   // Check if we're on the client side
   if (typeof window !== 'undefined') {
-    // In production on Vercel, use the deployment URL
-    const hostname = window.location.hostname
-    
-    // If we're on a Vercel deployment
-    if (hostname.includes('vercel.app') || hostname.includes('accountability-partner')) {
-      return `${window.location.protocol}//${hostname}/`
-    }
-    
-    // Otherwise use the current origin
+    // Always use the current browser URL when on client
+    // This ensures we get the right URL regardless of deployment
     return window.location.origin + '/'
   }
   

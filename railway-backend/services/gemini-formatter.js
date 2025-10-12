@@ -157,6 +157,7 @@ REQUIREMENTS:
 6. Use WhatsApp-friendly formatting (** for bold)
 7. Keep total message under 500 characters if possible
 8. Include relevant emojis but don't overdo it
+9. IMPORTANT: Generate only ONE message format - DO NOT provide multiple options or variations
 
 Generate the complete morning message:`;
   }
@@ -199,6 +200,8 @@ Performance guidelines:
 - 60-79%: Good progress, encourage consistency 💪
 - Below 60%: Stay positive, focus on tomorrow 🌱
 
+IMPORTANT: Generate only ONE message format - DO NOT provide multiple options or variations
+
 Generate the complete evening summary:`;
   }
 
@@ -227,8 +230,11 @@ REQUIREMENTS:
 5. Keep professional but warm tone
 6. Maximum 2-3 lines
 7. Use WhatsApp formatting (** for bold)
+8. IMPORTANT: Generate only ONE message format - DO NOT provide multiple options or variations
+9. Use action-oriented language (emphasis on what was done)
+10. For task_added: Keep it brief (1 line max) as the full task list will follow
 
-Generate a contextual notification message:`;
+Generate a single contextual notification message (no options or alternatives):`;
   }
 
   /**
@@ -259,6 +265,7 @@ REQUIREMENTS:
 4. Use WhatsApp formatting (** for bold)
 5. Keep message concise (3-4 lines max)
 6. End with positive note about productivity
+7. IMPORTANT: Generate only ONE message format - DO NOT provide multiple options or variations
 
 Generate a bulk update notification:`;
   }
@@ -340,7 +347,7 @@ Generate a bulk update notification:`;
   getFallbackTaskUpdateMessage(updateData) {
     switch (updateData.type) {
       case 'task_added':
-        return `➕ ${updateData.user_name} added: **${updateData.task_name}**`;
+        return `➕ ${updateData.user_name} added a task: "${updateData.task_name}". Stay accountable! 🚀`;
       case 'task_completed':
         return `✅ ${updateData.user_name} completed: **${updateData.task_name}**\nGreat job! 🎉`;
       case 'task_updated':

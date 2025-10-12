@@ -229,6 +229,12 @@ class SchedulerService {
         })
       };
 
+      // If a task was added, fetch and include the user's updated task list
+      if (change.type === 'task_added') {
+        const userTasks = await this.getUserPendingTasks(change.user_id);
+        updateData.task_list = userTasks;
+      }
+
       await this.whatsappBot.sendTaskUpdateNotification(updateData);
     } catch (error) {
       console.error('❌ Error sending single task notification:', error);
@@ -406,6 +412,27 @@ class SchedulerService {
     }
     
     return message;
+  }
+
+  async getUserPendingTasks(userId) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Get user's pending tasks
+      const { data: tasks } = await this.supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .neq('status', 'done')
+        .order('due_date', { ascending: true, nullsLast: true })
+        .order('priority', { ascending: false })
+        .limit(10);
+
+      return tasks || [];
+    } catch (error) {
+      console.error('❌ Error fetching user pending tasks:', error);
+      return [];
+    }
   }
 
   async generateContextualMessage(change, userName) {

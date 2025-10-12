@@ -1,32 +1,116 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { redirect } from 'next/navigation'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
-import { ClipboardList, CheckCircle2, Zap, Users, TrendingUp, Clock, MessageSquare, Plus, ChevronRight, Activity } from 'lucide-react'
+import { ClipboardList, CheckCircle2, Zap, Users, TrendingUp, Clock, MessageSquare, Plus, ChevronRight, Activity, Loader2, RefreshCw } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 
-// Force dynamic rendering for this authenticated page
-export const dynamic = 'force-dynamic'
+export default function DashboardPage() {
+  const router = useRouter()
+  const supabase = createClient()
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [systemStatus, setSystemStatus] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
 
-export default async function DashboardPage() {
-  const supabase = await createServerSupabaseClient()
-  
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    redirect('/login')
+  const fetchDashboardData = async () => {
+    try {
+      setError(null)
+      
+      // Fetch both dashboard stats and system status
+      const [statsResponse, statusResponse] = await Promise.all([
+        fetch('/api/dashboard/stats'),
+        fetch('/api/dashboard/system-status')
+      ])
+      
+      if (!statsResponse.ok) {
+        if (statsResponse.status === 401) {
+          router.push('/login')
+          return
+        }
+        throw new Error('Failed to fetch dashboard data')
+      }
+      
+      const statsData = await statsResponse.json()
+      const statusData = await statusResponse.json()
+      
+      if (statsData.success) {
+        setDashboardData(statsData.data)
+      }
+      
+      if (statusData.success) {
+        setSystemStatus(statusData.data)
+      }
+      
+      if (!statsData.success) {
+        throw new Error(statsData.error || 'Failed to load dashboard')
+      }
+    } catch (err) {
+      console.error('Dashboard error:', err)
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
   }
 
-  // Get user info
-  const { data: user } = await supabase
-    .from('users')
-    .select('*')
-    .eq('notion_id', session.user.id)
-    .single()
+  useEffect(() => {
+    fetchDashboardData()
+    
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      setRefreshing(true)
+      fetchDashboardData()
+    }, 30000)
+    
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  const handleRefresh = () => {
+    setRefreshing(true)
+    fetchDashboardData()
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <p className="text-red-600">{error}</p>
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const { user, stats, recentActivity } = dashboardData || {}
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,11 +126,20 @@ export default async function DashboardPage() {
                 Dashboard
               </h1>
             </div>
-            <form action="/auth/logout" method="post">
-              <Button type="submit" variant="outline" size="sm">
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="ml-2 hidden sm:inline">Refresh</span>
+              </Button>
+              <Button onClick={handleSignOut} variant="outline" size="sm">
                 Sign Out
               </Button>
-            </form>
+            </div>
           </div>
         </div>
       </header>
@@ -62,6 +155,11 @@ export default async function DashboardPage() {
               <p className="text-primary-foreground/90 text-lg">
                 Let's make today count. Your accountability partner is counting on you!
               </p>
+              {stats?.todayTasks?.total > 0 && (
+                <p className="text-primary-foreground/70 text-sm mt-2">
+                  You have {stats.todayTasks.total - stats.todayTasks.completed} tasks remaining today
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -74,9 +172,14 @@ export default async function DashboardPage() {
               <ClipboardList className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground">3 completed</p>
-              <Progress value={25} className="mt-2" />
+              <div className="text-2xl font-bold">{stats?.todayTasks?.total || 0}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats?.todayTasks?.completed || 0} completed
+              </p>
+              <Progress 
+                value={stats?.todayTasks?.progress || 0} 
+                className="mt-2" 
+              />
             </CardContent>
           </Card>
 
@@ -86,12 +189,14 @@ export default async function DashboardPage() {
               <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">68%</div>
+              <div className="text-2xl font-bold">{stats?.weekProgress?.percentage || 0}%</div>
               <p className="text-xs text-muted-foreground">
-                <TrendingUp className="inline h-3 w-3 mr-1" />
-                12% from last week
+                {stats?.weekProgress?.completed || 0} of {stats?.weekProgress?.total || 0} tasks
               </p>
-              <Progress value={68} className="mt-2" />
+              <Progress 
+                value={stats?.weekProgress?.percentage || 0} 
+                className="mt-2" 
+              />
             </CardContent>
           </Card>
 
@@ -101,10 +206,15 @@ export default async function DashboardPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2</div>
+              <div className="text-2xl font-bold">{stats?.partners?.count || 0}</div>
               <div className="flex gap-2 mt-2">
-                <Badge variant="secondary">Active</Badge>
-                <Badge variant="secondary">Active</Badge>
+                {stats?.partners?.list?.map((partner: any) => (
+                  <Badge key={partner.id} variant="secondary">
+                    {partner.name}
+                  </Badge>
+                )) || (
+                  <p className="text-xs text-muted-foreground">No partners yet</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -115,12 +225,17 @@ export default async function DashboardPage() {
               <Zap className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">5</div>
-              <p className="text-xs text-muted-foreground">Keep it going!</p>
+              <div className="text-2xl font-bold">{stats?.streak || 0}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats?.streak === 0 ? 'Start your streak!' : 'Keep it going!'}
+              </p>
               <div className="flex gap-1 mt-2">
-                {[...Array(5)].map((_, i) => (
+                {[...Array(Math.min(stats?.streak || 0, 7))].map((_, i) => (
                   <div key={i} className="h-2 w-2 rounded-full bg-primary" />
                 ))}
+                {stats?.streak > 7 && (
+                  <span className="text-xs text-muted-foreground ml-1">+{stats.streak - 7}</span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -129,49 +244,53 @@ export default async function DashboardPage() {
         {/* Activity Timeline */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Activity className="h-5 w-5 mr-2" />
-              Recent Activity
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center">
+                <Activity className="h-5 w-5 mr-2" />
+                Recent Activity
+              </span>
+              {refreshing && (
+                <Badge variant="secondary" className="text-xs">
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  Updating...
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <CheckCircle2 className="h-4 w-4 text-primary" />
+            {recentActivity && recentActivity.length > 0 ? (
+              <div className="space-y-4">
+                {recentActivity.map((activity: any, index: number) => (
+                  <div key={activity.id}>
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                          {activity.type === 'completed' ? (
+                            <CheckCircle2 className="h-4 w-4 text-primary" />
+                          ) : (
+                            <Clock className="h-4 w-4 text-primary" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm">
+                          {activity.type === 'completed' ? 'Completed' : 'Updated'}{' '}
+                          <span className="font-semibold">{activity.taskName}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </div>
+                    {index < recentActivity.length - 1 && <Separator className="mt-4" />}
                   </div>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">You completed <span className="font-semibold">"Morning Review"</span></p>
-                  <p className="text-xs text-muted-foreground">2 hours ago</p>
-                </div>
+                ))}
               </div>
-              <Separator />
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Plus className="h-4 w-4 text-primary" />
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">Partner added <span className="font-semibold">3 new tasks</span></p>
-                  <p className="text-xs text-muted-foreground">5 hours ago</p>
-                </div>
-              </div>
-              <Separator />
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <MessageSquare className="h-4 w-4 text-primary" />
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">Morning summary sent to WhatsApp</p>
-                  <p className="text-xs text-muted-foreground">Today at 6:00 AM</p>
-                </div>
-              </div>
-            </div>
+            ) : (
+              <p className="text-center text-muted-foreground text-sm py-4">
+                No recent activity. Start by creating some tasks!
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -183,22 +302,22 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <Button variant="outline" className="w-full justify-between" asChild>
-                <a href="#">
+                <Link href="/tasks">
                   View Today's Tasks
                   <ChevronRight className="h-4 w-4" />
-                </a>
+                </Link>
               </Button>
               <Button variant="outline" className="w-full justify-between" asChild>
-                <a href="#">
+                <Link href="/partners">
                   Check Partner Progress
                   <ChevronRight className="h-4 w-4" />
-                </a>
+                </Link>
               </Button>
               <Button variant="outline" className="w-full justify-between" asChild>
-                <a href="#">
+                <Link href="/reports">
                   Weekly Report
                   <ChevronRight className="h-4 w-4" />
-                </a>
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -210,25 +329,40 @@ export default async function DashboardPage() {
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">WhatsApp Bot</span>
-                <Badge variant="secondary" className="bg-green-100 text-green-700">Connected</Badge>
+                <Badge 
+                  variant="secondary" 
+                  className={systemStatus?.whatsapp?.connected ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}
+                >
+                  {systemStatus?.whatsapp?.status || 'Unknown'}
+                </Badge>
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Notion Sync</span>
-                <Badge variant="secondary" className="bg-green-100 text-green-700">Active</Badge>
+                <Badge variant="secondary" className="bg-green-100 text-green-700">
+                  {systemStatus?.notion?.status || 'Unknown'}
+                </Badge>
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Next Sync</span>
                 <span className="text-sm font-medium flex items-center">
                   <Clock className="h-3 w-3 mr-1" />
-                  in 3 minutes
+                  {systemStatus?.notion?.nextSync ? 
+                    formatDistanceToNow(new Date(systemStatus.notion.nextSync), { addSuffix: true }) : 
+                    'Unknown'
+                  }
                 </span>
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Last Message</span>
-                <span className="text-sm font-medium">10:00 PM</span>
+                <span className="text-sm font-medium">
+                  {systemStatus?.messaging?.lastMessage ? 
+                    new Date(systemStatus.messaging.lastMessage).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
+                    'Unknown'
+                  }
+                </span>
               </div>
             </CardContent>
           </Card>
