@@ -3,7 +3,21 @@
  * This ensures OAuth callbacks work correctly in both development and production
  */
 export function getURL(): string {
-  // In production, use the deployment URL
+  // Check if we're on the client side
+  if (typeof window !== 'undefined') {
+    // In production on Vercel, use the deployment URL
+    const hostname = window.location.hostname
+    
+    // If we're on a Vercel deployment
+    if (hostname.includes('vercel.app') || hostname.includes('accountability-partner')) {
+      return `${window.location.protocol}//${hostname}/`
+    }
+    
+    // Otherwise use the current origin
+    return window.location.origin + '/'
+  }
+  
+  // Server-side: use environment variables
   let url =
     process?.env?.NEXT_PUBLIC_SITE_URL ?? // Set this in your environment variables
     process?.env?.NEXT_PUBLIC_VERCEL_URL ?? // Automatically set by Vercel
