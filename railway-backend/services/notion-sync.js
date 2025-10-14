@@ -512,8 +512,9 @@ class NotionSyncService {
       const allChanges = [];
       const allErrors = [];
 
-      for (const user of users) {
-        const result = await this.syncUserTasks(user.id, user.name);
+      // Since both users share the same database, sync once and process for all users
+      if (users.length > 0) {
+        const result = await this.syncSharedDatabase(users);
         allChanges.push(...result.changes);
         allErrors.push(...result.errors);
       }
@@ -531,6 +532,64 @@ class NotionSyncService {
       console.error('❌ Error in syncAllUsers:', error);
       return { changes: [], errors: [error.message], syncTime: new Date() };
     }
+  }
+
+  async syncSharedDatabase(users) {
+    try {
+      console.log('🔄 Syncing shared database for all users...');
+      
+      // Use first user's database ID (they should all be the same)
+      const databaseId = users[0]?.notion_task_database_id;
+      if (!databaseId) {
+        console.error('❌ No database ID found');
+        return { changes: [], errors: ['No database ID'] };
+      }
+
+      // Get Notion client using first user's token
+      const notion = await this.getNotionClientForUser(users[0].id);
+      if (!notion) {
+        console.error('❌ Could not get Notion client');
+        return { changes: [], errors: ['No Notion client'] };
+      }
+
+      // Fetch tasks from Notion
+      const notionTasks = await this.fetchTasksFromNotion(notion, databaseId);
+      
+      // Get all existing tasks from database
+      const { data: existingTasks } = await this.supabase
+        .from('tasks')
+        .select('*');
+
+      // Process changes
+      const changes = await this.compareAndSyncTasksShared(users, notionTasks, existingTasks || []);
+      
+      return { changes, errors: [] };
+    } catch (error) {
+      console.error('❌ Error in syncSharedDatabase:', error);
+      return { changes: [], errors: [error.message] };
+    }
+  }
+
+  async compareAndSyncTasksShared(users, notionTasks, existingTasks) {
+    const changes = [];
+    const existingTasksMap = new Map(existingTasks.map(t => [t.notion_id, t]));
+
+    for (const notionTask of notionTasks) {
+      const existingTask = existingTasksMap.get(notionTask.notion_id);
+      
+      if (!existingTask) {
+        // New task - determine actual user who should own it
+        const actualUserId = await this.determineTaskOwner(notionTask, users[0].id);
+        const change = await this.insertTask(actualUserId, notionTask);
+        if (change) changes.push(change);
+      } else {
+        // Existing task - check for updates and determine who made the change
+        const change = await this.updateTaskIfChangedWithUserDetection(existingTask, notionTask);
+        if (change) changes.push(change);
+      }
+    }
+
+    return changes;
   }
 
   // Discover user's task databases automatically
