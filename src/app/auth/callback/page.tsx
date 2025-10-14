@@ -58,33 +58,26 @@ function AuthCallbackInner() {
         
         console.log('Authentication successful:', session.user.id)
         
-        // Create user in database if needed
+        // Create user in database if needed using API endpoint
         try {
-          const { data: existingUser } = await supabase
-            .from('users')
-            .select('*')
-            .eq('notion_id', session.user.id)
-            .single()
-          
-          if (!existingUser) {
-            const userData = {
+          const response = await fetch('/api/auth/create-user', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
               notion_id: session.user.id,
               name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
-            }
-            
-            console.log('Creating new user:', userData)
-            
-            const { error: insertError } = await supabase
-              .from('users')
-              .insert(userData)
-            
-            if (insertError) {
-              console.error('Error creating user:', insertError)
-              // Don't fail auth because of this
-            }
+            })
+          })
+          
+          if (!response.ok) {
+            const errorData = await response.json()
+            console.error('Error creating user via API:', errorData)
+            // Don't fail auth because of this
           }
-        } catch (dbError) {
-          console.error('Database error:', dbError)
+        } catch (apiError) {
+          console.error('API error:', apiError)
           // Continue anyway
         }
         
