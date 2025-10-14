@@ -162,14 +162,12 @@ class NotionSyncService {
         priority: this.extractSelect(properties['Priority']),
         effort_level: this.extractEffortLevel(properties['Effort level'] || properties['Effort'] || properties['Effort Level']),
         due_date: this.extractDate(properties['Due date'] || properties['Due Date'] || properties['Due']),
-        assignee: this.extractAssignee(properties['Assignee']),
         created_at: page.created_time,
-        updated_at: page.last_edited_time,
-        last_edited_by: page.last_edited_by
+        updated_at: page.last_edited_time
       };
 
       // Debug: Log extracted values
-      console.log(`✅ Parsed task: "${task.task_name}" - Status: "${task.status}" - Assignee: "${task.assignee}"`);
+      console.log(`✅ Parsed task: "${task.task_name}" - Status: "${task.status}"`);
       
       // Validate required fields
       if (!task.task_name) {
@@ -249,27 +247,6 @@ class NotionSyncService {
     return dateProperty.date.start;
   }
 
-  extractAssignee(assigneeProperty) {
-    if (!assigneeProperty) return null;
-    
-    // Handle people (multi_select or people property)
-    if (assigneeProperty.people && assigneeProperty.people.length > 0) {
-      return assigneeProperty.people[0].name || assigneeProperty.people[0].id;
-    }
-    
-    // Handle select property
-    if (assigneeProperty.select) {
-      return assigneeProperty.select.name;
-    }
-    
-    // Handle multi_select property
-    if (assigneeProperty.multi_select && assigneeProperty.multi_select.length > 0) {
-      return assigneeProperty.multi_select[0].name;
-    }
-    
-    return null;
-  }
-
   async compareAndSyncTasks(userId, notionTasks, existingTasks) {
     const changes = [];
     const existingTasksMap = new Map(existingTasks.map(t => [t.notion_id, t]));
@@ -278,13 +255,12 @@ class NotionSyncService {
       const existingTask = existingTasksMap.get(notionTask.notion_id);
       
       if (!existingTask) {
-        // New task - determine actual user who should own it
-        const actualUserId = await this.determineTaskOwner(notionTask, userId);
-        const change = await this.insertTask(actualUserId, notionTask);
+        // New task - insert
+        const change = await this.insertTask(userId, notionTask);
         if (change) changes.push(change);
       } else {
-        // Existing task - check for updates and determine who made the change
-        const change = await this.updateTaskIfChangedWithUserDetection(existingTask, notionTask);
+        // Existing task - check for updates
+        const change = await this.updateTaskIfChanged(existingTask, notionTask);
         if (change) changes.push(change);
       }
     }
@@ -316,14 +292,7 @@ class NotionSyncService {
         return null;
       }
 
-      // Get user name for better logging
-      const { data: user } = await this.supabase
-        .from('users')
-        .select('name')
-        .eq('id', userId)
-        .single();
-
-      console.log(`➕ Inserted new task: ${notionTask.task_name} (assigned to ${user?.name || userId})`);
+      console.log(`➕ Inserted new task: ${notionTask.task_name}`);
       return {
         type: 'task_added',
         task: data,
@@ -335,7 +304,7 @@ class NotionSyncService {
     }
   }
 
-  async updateTaskIfChangedWithUserDetection(existingTask, notionTask) {
+  async updateTaskIfChanged(existingTask, notionTask) {
     try {
       // Check if task has been updated
       const notionUpdatedAt = new Date(notionTask.updated_at);
@@ -344,9 +313,6 @@ class NotionSyncService {
       if (notionUpdatedAt <= existingUpdatedAt) {
         return null; // No changes
       }
-
-      // Determine who made the change
-      const userWhoMadeChange = await this.determineWhoMadeChange(notionTask, existingTask);
 
       // Determine type of change
       let changeType = 'task_updated';
@@ -374,132 +340,16 @@ class NotionSyncService {
         return null;
       }
 
-      console.log(`📝 Updated task: ${notionTask.task_name} (${changeType}) by ${userWhoMadeChange.name}`);
+      console.log(`📝 Updated task: ${notionTask.task_name} (${changeType})`);
       return {
         type: changeType,
         task: data,
-        user_id: userWhoMadeChange.id, // The person who actually made the change
-        original_owner_id: existingTask.user_id,
+        user_id: existingTask.user_id,
         old_status: existingTask.status,
         new_status: notionTask.status
       };
     } catch (error) {
-      console.error('❌ Error in updateTaskIfChangedWithUserDetection:', error);
-      return null;
-    }
-  }
-
-  async determineTaskOwner(notionTask, defaultUserId) {
-    try {
-      // Strategy 1: Check assignee property
-      if (notionTask.assignee) {
-        const user = await this.findUserByAssignee(notionTask.assignee);
-        if (user) return user.id;
-      }
-
-      // Strategy 2: Check task name patterns
-      const taskName = notionTask.task_name?.toLowerCase() || '';
-      if (taskName.includes('sidra')) {
-        const sidraUser = await this.findUserByName('Sidra');
-        if (sidraUser) return sidraUser.id;
-      }
-      if (taskName.includes('ilan')) {
-        const ilanUser = await this.findUserByName('Ilan');
-        if (ilanUser) return ilanUser.id;
-      }
-
-      // Default to the syncing user
-      return defaultUserId;
-    } catch (error) {
-      console.error('❌ Error determining task owner:', error);
-      return defaultUserId;
-    }
-  }
-
-  async determineWhoMadeChange(notionTask, existingTask) {
-    try {
-      // Strategy 1: Check assignee property
-      if (notionTask.assignee) {
-        const user = await this.findUserByAssignee(notionTask.assignee);
-        if (user) return user;
-      }
-
-      // Strategy 2: Check task name patterns for hints
-      const taskName = notionTask.task_name?.toLowerCase() || '';
-      if (taskName.includes('sidra')) {
-        const sidraUser = await this.findUserByName('Sidra');
-        if (sidraUser) return sidraUser;
-      }
-      if (taskName.includes('ilan')) {
-        const ilanUser = await this.findUserByName('Ilan');
-        if (ilanUser) return ilanUser;
-      }
-
-      // Strategy 3: Time-based heuristics
-      const changeTime = new Date(notionTask.updated_at);
-      const hour = changeTime.getHours();
-      
-      // Evening hours (6 PM - 11 PM) or early morning (6 AM - 9 AM) might indicate different users
-      const sidraUser = await this.findUserByName('Sidra');
-      const ilanUser = await this.findUserByName('Ilan');
-      
-      if (hour >= 18 && hour <= 23) {
-        return sidraUser || ilanUser;
-      } else if (hour >= 6 && hour <= 9) {
-        return ilanUser || sidraUser;
-      }
-
-      // Default: return the original task owner
-      return await this.findUserById(existingTask.user_id) || ilanUser || sidraUser;
-    } catch (error) {
-      console.error('❌ Error determining who made change:', error);
-      const users = await this.getAllUsers();
-      return users[0]; // Fallback
-    }
-  }
-
-  async findUserByAssignee(assignee) {
-    try {
-      const { data: users } = await this.supabase
-        .from('users')
-        .select('*');
-        
-      return users?.find(user => 
-        user.name.toLowerCase().includes(assignee.toLowerCase()) ||
-        assignee.toLowerCase().includes(user.name.toLowerCase())
-      );
-    } catch (error) {
-      console.error('❌ Error finding user by assignee:', error);
-      return null;
-    }
-  }
-
-  async findUserByName(namePattern) {
-    try {
-      const { data: users } = await this.supabase
-        .from('users')
-        .select('*');
-        
-      return users?.find(user => 
-        user.name.toLowerCase().includes(namePattern.toLowerCase())
-      );
-    } catch (error) {
-      console.error('❌ Error finding user by name:', error);
-      return null;
-    }
-  }
-
-  async findUserById(userId) {
-    try {
-      const { data: user } = await this.supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-        
-      return user;
-    } catch (error) {
-      console.error('❌ Error finding user by ID:', error);
+      console.error('❌ Error in updateTaskIfChanged:', error);
       return null;
     }
   }
