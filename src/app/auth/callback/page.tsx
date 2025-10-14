@@ -57,6 +57,21 @@ function AuthCallbackInner() {
         }
         
         console.log('Authentication successful:', session.user.id)
+        console.log('Session user metadata:', session.user.user_metadata)
+        console.log('Session provider token:', session.provider_token)
+        console.log('Session provider refresh token:', session.provider_refresh_token)
+        
+        // Extract Notion integration data from session
+        const notionData = {
+          notion_id: session.user.id,
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+          notion_access_token: session.provider_token || null,
+          notion_workspace_id: session.user.user_metadata?.workspace_id || null,
+          notion_workspace_name: session.user.user_metadata?.workspace_name || null,
+          notion_task_database_id: session.user.user_metadata?.database_id || null
+        }
+        
+        console.log('Notion data to store:', notionData)
         
         // Create user in database if needed using API endpoint
         try {
@@ -65,10 +80,7 @@ function AuthCallbackInner() {
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              notion_id: session.user.id,
-              name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
-            })
+            body: JSON.stringify(notionData)
           })
           
           if (!response.ok) {

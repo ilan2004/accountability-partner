@@ -5,7 +5,14 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { notion_id, name } = body
+    const { 
+      notion_id, 
+      name, 
+      notion_access_token, 
+      notion_workspace_id, 
+      notion_workspace_name, 
+      notion_task_database_id 
+    } = body
 
     if (!notion_id || !name) {
       return NextResponse.json(
@@ -36,7 +43,11 @@ export async function POST(request: NextRequest) {
     const userData = {
       notion_id,
       name,
-      whatsapp_number: null
+      whatsapp_number: null,
+      notion_access_token,
+      notion_workspace_id,
+      notion_workspace_name,
+      notion_task_database_id
     }
 
     const { data: newUser, error: insertError } = await adminSupabase
