@@ -48,8 +48,8 @@ class SchedulerService {
   }
 
   setupCronJobs() {
-    // Morning summary at 06:00 IST (00:30 UTC)
-    const morningJob = cron.schedule('30 0 * * *', async () => {
+    // Morning summary at 06:00 IST
+    const morningJob = cron.schedule('0 6 * * *', async () => {
       console.log('🌅 Running morning task summary job...');
       await this.sendMorningSummary();
     }, {
@@ -57,8 +57,8 @@ class SchedulerService {
       timezone: 'Asia/Kolkata'
     });
 
-    // Evening summary at 22:00 IST (16:30 UTC)
-    const eveningJob = cron.schedule('30 16 * * *', async () => {
+    // Evening summary at 22:00 IST (10 PM)
+    const eveningJob = cron.schedule('0 22 * * *', async () => {
       console.log('🌙 Running evening completion summary job...');
       await this.sendEveningSummary();
     }, {
@@ -178,35 +178,27 @@ class SchedulerService {
 
   async processTaskChanges(changes) {
     try {
-      // Group changes by type and user
-      const changesByUser = new Map();
+      // Get unique user IDs
+      const uniqueUserIds = [...new Set(changes.map(c => c.user_id))];
       
-      for (const change of changes) {
-        const userId = change.user_id;
-        if (!changesByUser.has(userId)) {
-          changesByUser.set(userId, []);
-        }
-        changesByUser.get(userId).push(change);
-      }
-
       // Get user names
       const { data: users } = await this.supabase
         .from('users')
         .select('id, name')
-        .in('id', Array.from(changesByUser.keys()));
+        .in('id', uniqueUserIds);
 
       const userNamesMap = new Map(users?.map(u => [u.id, u.name]) || []);
 
-      // Send notifications for each user's changes
-      for (const [userId, userChanges] of changesByUser) {
-        const userName = userNamesMap.get(userId) || `User ${userId}`;
+      // Send individual notifications for each change
+      for (const change of changes) {
+        const userName = userNamesMap.get(change.user_id) || `User ${change.user_id}`;
         
-        if (userChanges.length === 1) {
-          // Single change - send specific notification
-          await this.sendSingleTaskNotification(userChanges[0], userName);
-        } else {
-          // Multiple changes - send bulk notification
-          await this.sendBulkTaskNotification(userChanges, userName);
+        // Always send individual notifications
+        await this.sendSingleTaskNotification(change, userName);
+        
+        // Add a small delay between notifications to ensure they appear separately
+        if (changes.indexOf(change) < changes.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
         }
       }
     } catch (error) {

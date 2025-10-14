@@ -160,7 +160,7 @@ class NotionSyncService {
         description: this.extractRichText(properties['Description']),
         status: this.extractStatus(properties['Status']),
         priority: this.extractSelect(properties['Priority']),
-        effort_level: this.extractSelect(properties['Effort level'] || properties['Effort'] || properties['Effort Level']),
+        effort_level: this.extractEffortLevel(properties['Effort level'] || properties['Effort'] || properties['Effort Level']),
         due_date: this.extractDate(properties['Due date'] || properties['Due Date'] || properties['Due']),
         created_at: page.created_time,
         updated_at: page.last_edited_time
@@ -223,6 +223,23 @@ class NotionSyncService {
   extractSelect(selectProperty) {
     if (!selectProperty || !selectProperty.select) return 'medium';
     return selectProperty.select.name.toLowerCase();
+  }
+
+  extractEffortLevel(effortProperty) {
+    if (!effortProperty || !effortProperty.select) return 'medium';
+    const value = effortProperty.select.name.toLowerCase();
+    
+    // Map Notion effort levels to valid database enum values
+    // Based on the database, valid values are: low, medium, high
+    const effortMap = {
+      'small': 'low',
+      'medium': 'medium',
+      'large': 'high',
+      'high': 'high',
+      'low': 'low'
+    };
+    
+    return effortMap[value] || 'medium';
   }
 
   extractDate(dateProperty) {
