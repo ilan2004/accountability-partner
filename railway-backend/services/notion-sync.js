@@ -150,7 +150,7 @@ class NotionSyncService {
       return tasks.filter(task => task !== null);
     } catch (error) {
       // If filtering by Archived property fails, try without it but still check page.archived
-      if (error.message && error.message.includes('property does not exist')) {
+      if (error.code === 'validation_error' && error.message.includes('Could not find property')) {
         console.log('⚠️ No "Archived" property found, filtering by page archive status only...');
         try {
           const response = await notion.databases.query({
