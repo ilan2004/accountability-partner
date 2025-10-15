@@ -298,45 +298,35 @@ Generate a bulk update notification:`;
    * Fallback evening message if AI fails
    */
   getFallbackEveningMessage(data) {
-    let message = '🌙 **End of Day Summary**\n\n';
-    message += 'Hey Ilan and Sidra!\n\n';
-    message += 'Wrapping up our day, and wanted to check in on progress.\n\n';
+    let message = '🌙 **Hey Ilan & Sidra! 🌙**\n\n';
+    message += 'Here\'s a quick update on our progress for today:\n\n';
     
     // Add individual user summaries with personalized messages
     for (const summary of data.users_summaries) {
-      message += `**${summary.user.name}**: ${summary.completed_count}/${summary.total_count} tasks completed.\n`;
-      
-      // List completed tasks if any
-      if (summary.completed_count > 0) {
-        const completedTasks = summary.tasks.filter(t => t.status === 'done');
-        message += 'Completed tasks:\n';
-        completedTasks.forEach(task => {
-          message += `  ✅ ${task.task_name}\n`;
-        });
-        message += '\n';
+      message += `* **${summary.user.name}:** ${summary.completed_count}/${summary.total_count} tasks completed`;
+      if (summary.completion_rate > 0) {
+        message += ` (${summary.completion_rate}%)`;
       }
-      
-      // Add personalized motivation based on completion
-      if (summary.completed_count === 0 && summary.total_count > 0) {
-        message += `Alright ${summary.user.name}, no worries at all! Even starting is a victory. Tomorrow is a fresh start! 🌱 `;
-        message += `Let's tackle those tasks with renewed energy. Remember, you got this!\n\n`;
-      } else if (summary.completion_rate < 50) {
-        message += `Good start ${summary.user.name}! Progress is progress, no matter the pace. `;
-        message += `Tomorrow let's keep building on this momentum! 💪\n\n`;
-      } else if (summary.completion_rate < 80) {
-        message += `Great progress ${summary.user.name}! You're really getting things done. `;
-        message += `Keep up the excellent work! 🎯\n\n`;
-      } else {
-        message += `Outstanding work ${summary.user.name}! You absolutely crushed it today! 🔥 `;
-        message += `This is the energy we love to see!\n\n`;
-      }
+      message += '\n';
     }
     
-    // Add closing motivation
-    message += "Let's make tomorrow awesome! ✨\n\n";
+    // Add personalized motivation based on best performer
+    const bestPerformer = data.users_summaries.reduce((best, current) => 
+      current.completion_rate > best.completion_rate ? current : best
+    );
     
-    // Add simple statistics
-    message += `📊 Overall Completion Rate: ${data.overall_completion_rate}%`;
+    if (bestPerformer.completion_rate >= 70) {
+      message += `\n${bestPerformer.user.name}, amazing job crushing your tasks today! 🎉 `;
+    }
+    
+    const otherUser = data.users_summaries.find(s => s.user.id !== bestPerformer.user.id);
+    if (otherUser && otherUser.completion_rate > 0) {
+      message += `${otherUser.user.name}, you\'ve made progress and that\'s what counts! 💪 `;
+    }
+    
+    message += 'Remember, even small steps forward are still steps forward.\n\n';
+    message += "Let\'s both recharge tonight and come back strong tomorrow! 🌱 We\'ve got this! ";
+    message += 'Thanks for being such awesome accountability partners! 🙌';
     
     return message;
   }

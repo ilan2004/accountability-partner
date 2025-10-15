@@ -239,9 +239,9 @@ ${updateData.contextual_message || ''}`;
               message += `${taskLine}\n`;
             });
             
-            // Add task count summary
+            // Add task count summary for today
             const taskCount = updateData.task_list.length;
-            message += `\n🎯 Total pending tasks: ${taskCount}`;
+            message += `\n🎯 Today's pending tasks: ${taskCount}`;
           }
           break;
           

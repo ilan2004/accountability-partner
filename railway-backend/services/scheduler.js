@@ -267,12 +267,12 @@ class SchedulerService {
       const usersSummaries = [];
 
       for (const user of users) {
-        // Get user's tasks for today and near future
+        // Get user's tasks for today only (due today or no due date)
         const { data: tasks } = await this.supabase
           .from('tasks')
           .select('*')
           .eq('user_id', user.id)
-          .or(`due_date.is.null,due_date.gte.${today}`)
+          .or(`due_date.eq.${today},due_date.is.null`)
           .neq('status', 'done')
           .order('due_date', { ascending: true, nullsLast: true })
           .limit(10);
@@ -311,26 +311,28 @@ class SchedulerService {
       let totalCompleted = 0;
 
       for (const user of users) {
-        // Get all user's tasks (not just today's)
-        const { data: allTasks } = await this.supabase
+        // Get user's tasks for today only (due today or no due date)
+        const { data: todayTasks } = await this.supabase
           .from('tasks')
           .select('*')
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .or(`due_date.eq.${today},due_date.is.null`);
 
-        // Get completed tasks (regardless of when they were completed)
+        // Get completed tasks for today only
         const { data: completedTasks } = await this.supabase
           .from('tasks')
           .select('*')
           .eq('user_id', user.id)
-          .eq('status', 'done');
+          .eq('status', 'done')
+          .or(`due_date.eq.${today},due_date.is.null`);
 
-        const userTaskCount = allTasks?.length || 0;
+        const userTaskCount = todayTasks?.length || 0;
         const userCompletedCount = completedTasks?.length || 0;
         const completionRate = userTaskCount > 0 ? Math.round((userCompletedCount / userTaskCount) * 100) : 0;
 
         usersSummaries.push({
           user: user,
-          tasks: allTasks || [],
+          tasks: todayTasks || [],
           completed_count: userCompletedCount,
           total_count: userTaskCount,
           completion_rate: completionRate
@@ -410,12 +412,13 @@ class SchedulerService {
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      // Get user's pending tasks
+      // Get user's pending tasks for today only
       const { data: tasks } = await this.supabase
         .from('tasks')
         .select('*')
         .eq('user_id', userId)
         .neq('status', 'done')
+        .or(`due_date.eq.${today},due_date.is.null`)
         .order('due_date', { ascending: true, nullsLast: true })
         .order('priority', { ascending: false })
         .limit(10);
