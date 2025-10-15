@@ -123,21 +123,60 @@ class NotionSyncService {
 
   async fetchTasksFromNotion(notion, databaseId) {
     try {
-      // Query without sorting to avoid property name issues
-      console.log('🗒️ Fetching tasks from Notion database...');
+      // Query with filter to exclude archived pages
+      console.log('🗒️ Fetching active tasks from Notion database (excluding trash)...');
       const response = await notion.databases.query({
-        database_id: databaseId
+        database_id: databaseId,
+        filter: {
+          property: 'Archived',
+          checkbox: {
+            equals: false
+          }
+        }
         // Removed sorting to avoid property name conflicts
       });
 
+      console.log(`📊 Found ${response.results.length} active (non-archived) pages`);
+      
       const tasks = response.results.map(page => {
+        // Additional check: skip if page is archived at the page level
+        if (page.archived) {
+          console.log(`🗑️ Skipping archived page: ${page.id}`);
+          return null;
+        }
         return this.parseNotionPageToTask(page);
       });
 
       return tasks.filter(task => task !== null);
     } catch (error) {
-      console.error('❌ Error fetching tasks from Notion:', error);
-      return [];
+      // If filtering by Archived property fails, try without it but still check page.archived
+      if (error.message && error.message.includes('property does not exist')) {
+        console.log('⚠️ No "Archived" property found, filtering by page archive status only...');
+        try {
+          const response = await notion.databases.query({
+            database_id: databaseId
+          });
+          
+          console.log(`📊 Found ${response.results.length} total pages, filtering archived ones...`);
+          
+          const tasks = response.results.map(page => {
+            // Skip archived pages
+            if (page.archived) {
+              console.log(`🗑️ Skipping archived page: ${page.id}`);
+              return null;
+            }
+            return this.parseNotionPageToTask(page);
+          });
+
+          return tasks.filter(task => task !== null);
+        } catch (fallbackError) {
+          console.error('❌ Error fetching tasks from Notion (fallback):', fallbackError);
+          return [];
+        }
+      } else {
+        console.error('❌ Error fetching tasks from Notion:', error);
+        return [];
+      }
     }
   }
 
